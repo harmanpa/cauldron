@@ -23,6 +23,8 @@
  */
 package tech.cae.cauldron.tasks;
 
+import tech.cae.cauldron.Cauldron;
+
 /**
  *
  * @author peter
@@ -31,10 +33,10 @@ public interface CauldronCallback {
 
     public void log(String message);
 
-    public void warning(String message);
-
     public void progress(String message, double progress);
 
     public void progress(double progress);
+    
+    public Cauldron getCauldron();
 
 }

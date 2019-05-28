@@ -50,15 +50,16 @@ public class SerializationTest extends AbstractCauldronTest {
             }
 
             @Override
-            public void warning(String message) {
-            }
-
-            @Override
             public void progress(String message, double progress) {
             }
 
             @Override
             public void progress(double progress) {
+            }
+
+            @Override
+            public Cauldron getCauldron() {
+                return SerializationTest.this.getCauldron();
             }
 
         });

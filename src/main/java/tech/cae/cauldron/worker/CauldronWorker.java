@@ -23,67 +23,31 @@
  */
 package tech.cae.cauldron.worker;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import tech.cae.cauldron.Cauldron;
-import tech.cae.cauldron.tasks.CauldronCallback;
-import tech.cae.cauldron.tasks.CauldronStatus;
 import tech.cae.cauldron.tasks.CauldronTask;
 
 /**
  *
  * @author peter
- * @param <T>
  */
-public class CauldronWorker<T extends CauldronTask> implements Runnable {
+public class CauldronWorker {
 
-    private final Cauldron cauldron;
-    private final Class<T> taskType;
+    private final ExecutorService service;
 
-    public CauldronWorker(Cauldron cauldron, Class<T> taskType) {
-        this.cauldron = cauldron;
-        this.taskType = taskType;
-    }
-
-    @Override
-    @SuppressWarnings("UseSpecificCatch")
-    public void run() {
-        while (true) {
-            T task = cauldron.poll(taskType);
-            try {
-                task.run(new WorkerCallback(task.getId()));
-                cauldron.completed(task, CauldronStatus.Completed);
-            } catch (Throwable ex) {
-                cauldron.completed(task, CauldronStatus.Failed);
-            }
+    public CauldronWorker(Cauldron cauldron, int parallelism, Class<? extends CauldronTask>... taskTypes) {
+        this.service = Executors.newFixedThreadPool(parallelism);
+        for (int i = 0; i < parallelism; i++) {
+            this.service.submit(new CauldronWorkerRunnable(cauldron, taskTypes));
         }
     }
 
-    class WorkerCallback implements CauldronCallback {
-
-        private final String id;
-
-        public WorkerCallback(String id) {
-            this.id = id;
+    public void shutdown(boolean force) {
+        if (force) {
+            this.service.shutdownNow();
+        } else {
+            this.service.shutdown();
         }
-
-        @Override
-        public void log(String message) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
-        }
-
-        @Override
-        public void warning(String message) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
-        }
-
-        @Override
-        public void progress(String message, double progress) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
-        }
-
-        @Override
-        public void progress(double progress) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
-        }
-
     }
 }

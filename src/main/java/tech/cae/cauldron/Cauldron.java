@@ -23,13 +23,20 @@
  */
 package tech.cae.cauldron;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import java.io.File;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import org.bson.BsonArray;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import tech.cae.cauldron.db.FileDeserializer;
@@ -38,6 +45,7 @@ import tech.cae.cauldron.db.MongoArtifactStore;
 import tech.cae.cauldron.db.MongoQueueCore;
 import tech.cae.cauldron.tasks.CauldronStatus;
 import tech.cae.cauldron.tasks.CauldronTask;
+import tech.cae.cauldron.worker.CauldronWorker;
 
 /**
  *
@@ -74,8 +82,8 @@ public class Cauldron {
         this.queue.ensureGetIndex();
     }
 
-    public static <T extends CauldronTask> void startWorker(String[] args, Class<T> taskType) {
-
+    public CauldronWorker startWorker(Class<? extends CauldronTask>... taskTypes) {
+        return new CauldronWorker(this, 4, taskTypes);
     }
 
     <T extends CauldronTask> Document serialize(T object) {
@@ -113,6 +121,45 @@ public class Cauldron {
     }
 
     /**
+     * Blocking call to get task of one of an array of given types
+     *
+     * @param taskTypes
+     * @return
+     */
+    public MultiTaskResponse pollMulti(Class<? extends CauldronTask>... taskTypes) {
+        Map<String, Class<? extends CauldronTask>> typeMap = new HashMap<>(taskTypes.length);
+        for (Class<? extends CauldronTask> taskType : taskTypes) {
+            typeMap.put(taskType.getName(), taskType);
+        }
+        Document doc = null;
+        while (doc == null) {
+            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000);
+        }
+        Class<? extends CauldronTask> taskType = typeMap.get(doc.getString("type"));
+        return new MultiTaskResponse(taskType, deserialize(doc, taskType));
+    }
+
+    public static class MultiTaskResponse {
+
+        private final Class<? extends CauldronTask> taskType;
+        private final CauldronTask task;
+
+        MultiTaskResponse(Class<? extends CauldronTask> taskType, CauldronTask task) {
+            this.taskType = taskType;
+            this.task = task;
+        }
+
+        public Class<? extends CauldronTask> getTaskType() {
+            return taskType;
+        }
+
+        public CauldronTask getTask() {
+            return task;
+        }
+
+    }
+
+    /**
      *
      * @param <T>
      * @param task
@@ -140,10 +187,9 @@ public class Cauldron {
             this.id = id;
         }
 
-        public <T extends CauldronTask> void then(T task) {
-// TODO: Add a task blocked by the previous task
+        public String getId() {
+            return id;
         }
-
     }
 
     /**
@@ -191,7 +237,162 @@ public class Cauldron {
         };
     }
 
+    public TaskMeta getTaskMeta(String id) {
+        Document message = collection.find(new Document("_id", new ObjectId(id))).first();
+        if (message == null) {
+            return null;
+        }
+        TaskMeta meta = new TaskMeta();
+        meta.setId(message.getObjectId("_id").toHexString());
+        meta.setType(message.get("payload", Document.class).getString("type"));
+        meta.setPriority(message.getDouble("priority"));
+        meta.setProgress(message.getDouble("progress"));
+        meta.setCreated(message.getDate("created"));
+        meta.setEarliestGet(message.getDate("earliestGet"));
+        meta.setResetTimestamp(message.getDate("resetTimestamp"));
+        meta.setStatus(message.getString("status"));
+        meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+        return meta;
+    }
+
+    public Iterable<TaskMeta> getTasksMetaData() {
+        return getTasksMetaData(null, new HashMap<>());
+    }
+
+    public Iterable<TaskMeta> getTasksMetaData(String status) {
+        return getTasksMetaData(status, new HashMap<>());
+    }
+
+    public Iterable<TaskMeta> getTasksMetaData(Map<String, String> payloadQuery) {
+        return getTasksMetaData(null, payloadQuery);
+    }
+
+    public Iterable<TaskMeta> getTasksMetaData(String status, Map<String, String> payloadQuery) {
+        return () -> {
+            Document query = status == null ? new Document() : new Document("status", status);
+            payloadQuery.forEach((key, value) -> query.append("payload." + key, value));
+            Iterator<Document> it = collection.find(query).iterator();
+            return new Iterator<TaskMeta>() {
+                @Override
+                public boolean hasNext() {
+                    return it.hasNext();
+                }
+
+                @Override
+                public TaskMeta next() {
+                    Document message = it.next();
+                    TaskMeta meta = new TaskMeta();
+                    meta.setId(message.getObjectId("_id").toHexString());
+                    meta.setType(message.get("payload", Document.class).getString("type"));
+                    meta.setPriority(message.getDouble("priority"));
+                    meta.setProgress(message.getDouble("progress"));
+                    meta.setCreated(message.getDate("created"));
+                    meta.setEarliestGet(message.getDate("earliestGet"));
+                    meta.setResetTimestamp(message.getDate("resetTimestamp"));
+                    meta.setStatus(message.getString("status"));
+                    meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+                    return meta;
+                }
+            };
+        };
+    }
+
     public static class TaskMeta {
 
+        @JsonProperty
+        private String id;
+        @JsonProperty
+        private String type;
+        @JsonProperty
+        private String status;
+        @JsonProperty
+        private Date created;
+        @JsonProperty
+        private Date earliestGet;
+        @JsonProperty
+        private Date resetTimestamp;
+        @JsonProperty
+        private double priority;
+        @JsonProperty
+        private double progress;
+        @JsonProperty
+        private List<String> log;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public Date getCreated() {
+            return created;
+        }
+
+        public void setCreated(Date created) {
+            this.created = created;
+        }
+
+        public Date getEarliestGet() {
+            return earliestGet;
+        }
+
+        public void setEarliestGet(Date earliestGet) {
+            this.earliestGet = earliestGet;
+        }
+
+        public Date getResetTimestamp() {
+            return resetTimestamp;
+        }
+
+        public void setResetTimestamp(Date resetTimestamp) {
+            this.resetTimestamp = resetTimestamp;
+        }
+
+        public double getPriority() {
+            return priority;
+        }
+
+        public void setPriority(double priority) {
+            this.priority = priority;
+        }
+
+        public double getProgress() {
+            return progress;
+        }
+
+        public void setProgress(double progress) {
+            this.progress = progress;
+        }
+
+        public List<String> getLog() {
+            return log;
+        }
+
+        public void setLog(List<String> log) {
+            this.log = log;
+        }
+
+    }
+
+    public MongoQueueCore getQueue() {
+        return queue;
     }
 }

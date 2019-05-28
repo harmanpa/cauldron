@@ -30,7 +30,7 @@ package tech.cae.cauldron.tasks;
 public enum CauldronStatus {
     Queued,
     Running,
-    Blocked,
+    Cancelled,
     Completed,
     Failed;
 
@@ -40,7 +40,7 @@ public enum CauldronStatus {
     }
 
     public static CauldronStatus fromString(String string) {
-        return valueOf(string.substring(0, 1).toUpperCase().concat(string.substring(1)));
+        return valueOf(string.substring(0, 1).toUpperCase().concat(string.substring(1).toLowerCase()));
     }
 
 }

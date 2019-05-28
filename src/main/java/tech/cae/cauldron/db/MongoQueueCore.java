@@ -30,9 +30,13 @@ import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.ReturnDocument;
 import com.mongodb.client.model.UpdateOptions;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.Date;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import org.bson.BsonArray;
+import org.bson.BsonString;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
@@ -203,7 +207,7 @@ public final class MongoQueueCore {
         final Date resetTimestamp = calendar.getTime();
 
         final Document sort = new Document("priority", 1).append("created", 1);
-        final Document update = new Document("$set", new Document("status", "running").append("resetTimestamp", resetTimestamp));
+        final Document update = new Document("$set", new Document("status", "running").append("resetTimestamp", resetTimestamp).append("progress", 0.0));
         final Document fields = new Document("payload", 1);
 
         calendar.setTimeInMillis(System.currentTimeMillis());
@@ -440,19 +444,27 @@ public final class MongoQueueCore {
                 .append("resetTimestamp", new Date(Long.MAX_VALUE))
                 .append("earliestGet", earliestGet)
                 .append("priority", priority)
-                .append("created", new Date());
+                .append("created", new Date())
+                .append("log", new BsonArray())
+                .append("progress", 0.0);
 
         collection.insertOne(message);
         return message.getObjectId("_id").toHexString();
     }
 
-    public void progress(String id, String log, double progress) {
-//        final Calendar calendar = Calendar.getInstance();
-//
-//        calendar.add(Calendar.SECOND, resetDuration);
-//        final Date resetTimestamp = calendar.getTime();
-//        final Document update = new Document("$set", new Document("status", "running").append("resetTimestamp", resetTimestamp));
-        //new Document("$push", new Document("log", new Document("$each", new String[]{log})))
+    public void progress(String id, Collection<String> log, double progress, int resetDuration) {
+        final Calendar calendar = Calendar.getInstance();
+        calendar.add(Calendar.SECOND, resetDuration);
+        final Date resetTimestamp = calendar.getTime();
+        Document setters = new Document("status", "running").append("resetTimestamp", resetTimestamp);
+        if (progress >= 0.0) {
+            setters.append("progress", progress);
+        }
+        Document update = new Document("$set", setters);
+        if (!log.isEmpty()) {
+            update.append("$push", new Document("log", new Document("$each", new BsonArray(log.stream().map((s) -> new BsonString(s)).collect(Collectors.toList())))));
+        }
+        collection.findOneAndUpdate(Filters.eq("_id", new ObjectId(id)), update);
     }
 
     private void ensureIndex(final Document index) {
