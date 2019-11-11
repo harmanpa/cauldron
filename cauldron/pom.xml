@@ -20,7 +20,6 @@
             <url>https://github.com/harmanpa</url>
         </contributor>
     </contributors>
-    
     <dependencies>
         <dependency>
             <groupId>org.mongodb</groupId>

@@ -1,0 +1,32 @@
+name: Publish Docker images
+
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Build and tag image 1
+      run: docker build --target worker -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$GITHUB_SHA" .
+
+    - name: Build and tag image 2
+      run: docker build --target cloudrun -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$GITHUB_SHA" .
+      
+    - name: Docker login
+      run: docker login docker.pkg.github.com -u $GITHUB_ACTOR -p $GITHUB_TOKEN
+      env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+    - name: Publish to GPR 1
+      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$GITHUB_SHA"
+      
+    - name: Publish to GPR 2
+      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$GITHUB_SHA"
+      
