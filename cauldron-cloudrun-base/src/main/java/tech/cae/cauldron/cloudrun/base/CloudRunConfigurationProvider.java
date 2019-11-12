@@ -25,6 +25,7 @@ package tech.cae.cauldron.cloudrun.base;
 
 import java.util.Iterator;
 import java.util.ServiceLoader;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
@@ -34,11 +35,11 @@ public abstract class CloudRunConfigurationProvider {
 
     public abstract CloudRunConfiguration getConfiguration();
 
-    public static CloudRunConfiguration get() {
+    public static CloudRunConfiguration get() throws CauldronException {
         Iterator<CloudRunConfigurationProvider> it = ServiceLoader.load(CloudRunConfigurationProvider.class).iterator();
         if (it.hasNext()) {
             return it.next().getConfiguration();
         }
-        return new CloudRunConfiguration("", "tasks", "responses");
+        throw new CauldronException("No CloudRunConfigurationProvider found");
     }
 }

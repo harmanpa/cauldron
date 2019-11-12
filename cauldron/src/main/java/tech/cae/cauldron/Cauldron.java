@@ -30,6 +30,7 @@ import com.mongodb.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -52,6 +53,7 @@ import tech.cae.cauldron.api.CauldronConfiguration;
 import tech.cae.cauldron.api.CauldronConfigurationProvider;
 import tech.cae.cauldron.api.CauldronStatus;
 import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
@@ -60,6 +62,7 @@ import tech.cae.cauldron.api.CauldronTask;
 public class Cauldron {
 
     private static final Logger LOG = Logger.getLogger(Cauldron.class.getName());
+    private static Cauldron INSTANCE;
 
     private final ObjectMapper mapper;
     private final MongoQueueCore queue;
@@ -68,17 +71,24 @@ public class Cauldron {
     private final ConcurrentMap<String, CompletableFuture<CauldronTask>> futures;
     private boolean completionCheckScheduled;
 
-    public Cauldron() {
+    public static Cauldron get() throws CauldronException {
+        if (INSTANCE == null) {
+            INSTANCE = new Cauldron();
+        }
+        return INSTANCE;
+    }
+
+    Cauldron() throws CauldronException {
         this(CauldronConfigurationProvider.get());
     }
 
-    public Cauldron(CauldronConfiguration configuration) {
+    Cauldron(CauldronConfiguration configuration) {
         this(new MongoClient(configuration.getDbHost(), configuration.getDbPort())
                 .getDatabase(configuration.getDbName()),
                 configuration.getDbCollection());
     }
 
-    public Cauldron(MongoDatabase database, String queueCollection) {
+    Cauldron(MongoDatabase database, String queueCollection) {
         this.mapper = new ObjectMapper();
         this.collection = database.getCollection(queueCollection);
         this.queue = new MongoQueueCore(collection);
@@ -104,11 +114,28 @@ public class Cauldron {
      * @param taskType
      * @return
      */
-    public <T extends CauldronTask> T poll(Class<T> taskType) {
+    public <T extends CauldronTask> T pollScheduler(Class<T> taskType) {
         LOG.info("Requesting a task");
         Document doc = null;
         while (doc == null) {
-            doc = queue.get(new Document("type", taskType.getName()), 1000);
+            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 1000, true, "");
+        }
+        LOG.info("Returning a task");
+        return deserialize(doc, taskType);
+    }
+
+    /**
+     * Blocking call to get task of given type
+     *
+     * @param <T>
+     * @param taskType
+     * @return
+     */
+    public <T extends CauldronTask> T pollWorker(Class<T> taskType, String worker) {
+        LOG.info("Requesting a task");
+        Document doc = null;
+        while (doc == null) {
+            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 1000, false, worker);
         }
         LOG.info("Returning a task");
         return deserialize(doc, taskType);
@@ -120,14 +147,34 @@ public class Cauldron {
      * @param taskTypes
      * @return
      */
-    public MultiTaskResponse pollMulti(Collection<Class<? extends CauldronTask>> taskTypes) {
+    public MultiTaskResponse pollMultiScheduler(Collection<Class<? extends CauldronTask>> taskTypes) {
         Map<String, Class<? extends CauldronTask>> typeMap = new HashMap<>(taskTypes.size());
         for (Class<? extends CauldronTask> taskType : taskTypes) {
             typeMap.put(taskType.getName(), taskType);
         }
         Document doc = null;
         while (doc == null) {
-            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000);
+            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, -1, 1000, true, "");
+        }
+        Class<? extends CauldronTask> taskType = typeMap.get(doc.getString("type"));
+        return new MultiTaskResponse(taskType, deserialize(doc, taskType));
+    }
+
+    /**
+     * Blocking call to get task of one of an array of given types
+     *
+     * @param taskTypes
+     * @param worker
+     * @return
+     */
+    public MultiTaskResponse pollMultiWorker(Collection<Class<? extends CauldronTask>> taskTypes, String worker) {
+        Map<String, Class<? extends CauldronTask>> typeMap = new HashMap<>(taskTypes.size());
+        for (Class<? extends CauldronTask> taskType : taskTypes) {
+            typeMap.put(taskType.getName(), taskType);
+        }
+        Document doc = null;
+        while (doc == null) {
+            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, -1, 1000, false, worker);
         }
         Class<? extends CauldronTask> taskType = typeMap.get(doc.getString("type"));
         return new MultiTaskResponse(taskType, deserialize(doc, taskType));
@@ -160,7 +207,7 @@ public class Cauldron {
      * @return
      */
     public <T extends CauldronTask> SubmitResponse submit(T task) {
-        return new SubmitResponse(queue.send(serialize(task)));
+        return new SubmitResponse(queue.send(serialize(task), new Date(), 0.0));
     }
 
     /**
@@ -173,8 +220,8 @@ public class Cauldron {
         queue.ack(serialize(task), status.toString());
     }
 
-    public void progress(String id, Collection<String> log, double progress, int resetDuration) {
-        queue.progress(id, log, progress, resetDuration);
+    public void progress(String id, Collection<String> log, double progress, int resetDuration, String worker) {
+        queue.progress(id, log, progress, resetDuration, worker);
     }
 
     public class SubmitResponse {
@@ -256,7 +303,11 @@ public class Cauldron {
         meta.setResetTimestamp(message.getDate("resetTimestamp"));
         meta.setStatus(message.getString("status"));
         meta.setAttempt(message.getInteger("attempt"));
-        //meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+        if (message.get("log", BsonArray.class) == null) {
+            meta.setLog(Arrays.asList());
+        } else {
+            meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+        }
         return meta;
     }
 
@@ -296,7 +347,11 @@ public class Cauldron {
                     meta.setResetTimestamp(message.getDate("resetTimestamp"));
                     meta.setStatus(message.getString("status"));
                     meta.setAttempt(message.getInteger("attempt"));
-//                    meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+                    if (message.get("log", BsonArray.class) == null) {
+                        meta.setLog(Arrays.asList());
+                    } else {
+                        meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+                    }
                     return meta;
                 }
             };
@@ -325,7 +380,11 @@ public class Cauldron {
                     meta.setEarliestGet(message.getDate("earliestGet"));
                     meta.setResetTimestamp(message.getDate("resetTimestamp"));
                     meta.setStatus(message.getString("status"));
-                    //meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+//                    if (message.get("log", BsonArray.class) == null) {
+//                        meta.setLog(Arrays.asList());
+//                    } else {
+//                        meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
+//                    }
                     return meta;
                 }
             };

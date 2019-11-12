@@ -38,7 +38,7 @@ public class SubmitTest extends AbstractCauldronTest {
         Thread thread2 = new Thread(new Runnable() {
             @Override
             public void run() {
-                MyTask polledTask = getCauldron().poll(MyTask.class);
+                MyTask polledTask = getCauldron().pollWorker(MyTask.class, "thread2");
                 try {
                     polledTask.run(null);
                     getCauldron().completed(polledTask, CauldronStatus.Completed);

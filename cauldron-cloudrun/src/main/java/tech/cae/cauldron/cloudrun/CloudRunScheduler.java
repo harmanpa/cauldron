@@ -79,7 +79,7 @@ public class CloudRunScheduler {
             this.publisher = Publisher.newBuilder(
                     ProjectTopicName.of(configuration.getProjectId(),
                             configuration.getScheduleTopic())).build();
-            this.cauldron = new Cauldron();
+            this.cauldron = Cauldron.get();
             this.types = CauldronTaskTypeProvider.getAllTaskTypes();
             this.subscriber = Subscriber.newBuilder(ProjectSubscriptionName.of(
                     configuration.getProjectId(),
@@ -96,11 +96,8 @@ public class CloudRunScheduler {
         @Override
         public void run() {
             while (true) {
-                // TODO: Should change to "scheduled", not "running"
-                // TODO: Should have an extra query to find tasks that are e.g. 1s old in queue (similar to polling rate, i.e. task appears within polling rate it is grabbed by polling worker first)
-                // This will prioritise "local" workers which don't cost cloud resources
                 try {
-                    CauldronTask task = cauldron.pollMulti(types).getTask();
+                    CauldronTask task = cauldron.pollMultiScheduler(types).getTask();
                     publisher.publish(CloudRunUtilities.serializeTask(task)).get();
                 } catch (JsonProcessingException | InterruptedException | ExecutionException ex) {
                     Logger.getLogger(CloudRunScheduler.class.getName()).log(Level.SEVERE, null, ex);
@@ -123,7 +120,7 @@ public class CloudRunScheduler {
                         cauldron.completed(response.getTask(), CauldronStatus.Failed);
                     }
                 } else {
-                    cauldron.progress(response.getTaskId(), response.getLog(), response.getProgress(), 1000);
+                    cauldron.progress(response.getTaskId(), response.getLog(), response.getProgress(), 1000, response.getWorker());
                 }
                 arc.ack();
             } catch (IOException ex) {

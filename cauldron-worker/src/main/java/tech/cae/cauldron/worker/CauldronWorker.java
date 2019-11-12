@@ -24,6 +24,7 @@
 package tech.cae.cauldron.worker;
 
 import java.util.Collection;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -40,17 +41,20 @@ import tech.cae.cauldron.api.exceptions.CauldronException;
 public class CauldronWorker {
 
     private final ExecutorService service;
+    private final String name;
 
     public CauldronWorker(Cauldron cauldron, int parallelism, Collection<Class<? extends CauldronTask>> taskTypes) {
         this.service = Executors.newFixedThreadPool(parallelism);
+        this.name = UUID.randomUUID().toString();
         for (int i = 0; i < parallelism; i++) {
-            this.service.submit(new CauldronWorkerRunnable(cauldron, taskTypes));
+            this.service.submit(new CauldronWorkerRunnable(cauldron, taskTypes, name + ":" + Integer.toString(i + 1)));
         }
     }
 
     public static void main(String[] args) {
         try {
-            final CauldronWorker worker = new CauldronWorker(new Cauldron(),
+            final CauldronWorker worker = new CauldronWorker(
+                    Cauldron.get(),
                     Runtime.getRuntime().availableProcessors(),
                     CauldronTaskTypeProvider.getAllTaskTypes());
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

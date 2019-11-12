@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>tech.cae</groupId>
     <artifactId>cauldron-cloudrun-worker</artifactId>
-    <version>1.1-SNAPSHOT</version>
+    <version>dev</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -16,12 +16,6 @@
             <artifactId>jersey-server</artifactId>
             <version>2.26</version>
             <type>jar</type>
-            <exclusions>
-                <exclusion>
-                    <groupId>javax.validation</groupId>
-                    <artifactId>validation-api</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.glassfish.jersey.containers</groupId>
@@ -53,8 +47,8 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.glassfish.jersey.media</groupId>
-            <artifactId>jersey-media-multipart</artifactId>
+            <groupId>org.glassfish.jersey.inject</groupId>
+            <artifactId>jersey-hk2</artifactId>
             <version>2.26</version>
         </dependency>
         <dependency>
@@ -96,6 +90,7 @@
             <artifactId>cauldron-cloudrun-base</artifactId>
             <version>${project.version}</version>
         </dependency>
+        
     </dependencies>
     <build>
         <plugins>

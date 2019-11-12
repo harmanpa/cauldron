@@ -31,6 +31,7 @@ import com.google.pubsub.v1.PubsubMessage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.ws.rs.POST;
@@ -52,14 +53,16 @@ public class WorkerResource {
 
     private final ThreadLocal<WorkerCallback> callback;
     private final Publisher publisher;
+    private final String name;
 
     @SuppressWarnings("Convert2Diamond")
-    public WorkerResource() throws IOException {
+    public WorkerResource() throws IOException, CauldronException {
         CloudRunConfiguration configuration = CloudRunConfigurationProvider.get();
         this.callback = new ThreadLocal<WorkerCallback>();
         this.publisher = Publisher.newBuilder(
                 ProjectTopicName.of(configuration.getProjectId(),
                         configuration.getResponseTopic())).build();
+        this.name = UUID.randomUUID().toString();
     }
 
     @POST
@@ -68,7 +71,7 @@ public class WorkerResource {
         try {
             CauldronTask task = CloudRunUtilities.deserializeTask(message);
             try {
-                callback.set(new WorkerCallback(task.getId(), this.publisher));
+                callback.set(new WorkerCallback(task.getId(), this.publisher, this.name));
                 task.run(callback.get());
                 callback.get().complete(task);
             } catch (CauldronException ex) {
@@ -91,13 +94,15 @@ public class WorkerResource {
         private final List<String> logs;
         private CauldronTask task;
         private boolean success;
+        private String name;
 
-        WorkerCallback(String taskId, Publisher publisher) {
+        WorkerCallback(String taskId, Publisher publisher, String name) {
             this.taskId = taskId;
             this.publisher = publisher;
             this.lastLog = 0L;
             this.progress = -1.0;
             this.logs = new ArrayList<>();
+            this.name = name;
         }
 
         @Override
@@ -134,7 +139,7 @@ public class WorkerResource {
 
         private void log(boolean force) {
             if (force || System.currentTimeMillis() - lastLog > 1000) {
-                CloudRunResponse response = new CloudRunResponse(taskId, task, progress, new ArrayList<>(logs), success);
+                CloudRunResponse response = new CloudRunResponse(taskId, task, progress, new ArrayList<>(logs), success, name);
                 send(response);
                 logs.clear();
                 lastLog = System.currentTimeMillis();

@@ -23,17 +23,20 @@
  */
 package tech.cae.cauldron;
 
+import com.mongodb.BasicDBObject;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.FindOneAndUpdateOptions;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.ReturnDocument;
 import com.mongodb.client.model.UpdateOptions;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.bson.BsonArray;
@@ -145,37 +148,6 @@ final class MongoQueueCore {
     }
 
     /**
-     * Get a non running message from queue with a wait of 3 seconds and poll of
-     * 200 milliseconds
-     *
-     * @param query query where top level fields do not contain operators. Lower
-     * level fields can however. eg: valid {a: {$gt: 1}, "b.c": 3}, invalid
-     * {$and: [{...}, {...}]}. Should not be null.
-     * @param resetDuration duration in seconds before this message is
-     * considered abandoned and will be given with another call to get()
-     * @return message or null
-     */
-    public Document get(final Document query, final int resetDuration) {
-        return get(query, resetDuration, 3000, 200);
-    }
-
-    /**
-     * Get a non running message from queue with a poll of 200 milliseconds
-     *
-     * @param query query where top level fields do not contain operators. Lower
-     * level fields can however. eg: valid {a: {$gt: 1}, "b.c": 3}, invalid
-     * {$and: [{...}, {...}]}. Should not be null.
-     * @param resetDuration duration in seconds before this message is
-     * considered abandoned and will be given with another call to get()
-     * @param waitDuration duration in milliseconds to keep polling before
-     * returning null
-     * @return message or null
-     */
-    public Document get(final Document query, final int resetDuration, final int waitDuration) {
-        return get(query, resetDuration, waitDuration, 200);
-    }
-
-    /**
      * Get a non running message from queue
      *
      * @param query query where top level fields do not contain operators. Lower
@@ -183,26 +155,18 @@ final class MongoQueueCore {
      * {$and: [{...}, {...}]}. Should not be null.
      * @param resetDuration duration in seconds before this message is
      * considered abandoned and will be given with another call to get()
-     * @param waitDuration duration in milliseconds to keep polling before
-     * returning null
-     * @param pollDuration duration in milliseconds between poll attempts
+     * @param waitDuration duration in milliseconds to poll
+     * @param pollAttempts number of attempts to poll between resetting
      * @return message or null
      */
     @SuppressWarnings("SleepWhileInLoop")
-    public Document get(final Document query, final int resetDuration, final int waitDuration, long pollDuration) {
+    public Document get(final Document query, final int resetDuration, final int waitDuration, int pollAttempts, boolean scheduler, String worker) {
         Objects.requireNonNull(query);
 
         //reset stuck messages
         collection.updateMany(new Document("status", "running").append("resetTimestamp", new Document("$lte", new Date())),
                 new Document("$set", new Document("status", "queued")).append("$inc", new Document("attempt", 1)),
                 new UpdateOptions().upsert(false));
-
-        final Document builtQuery = new Document("status", "queued");
-        query.entrySet().forEach((field) -> {
-            builtQuery.append("payload." + field.getKey(), field.getValue());
-        });
-
-        builtQuery.append("earliestGet", new Document("$lte", new Date()));
 
         final Calendar calendar = Calendar.getInstance();
 
@@ -213,35 +177,26 @@ final class MongoQueueCore {
         final Document update = new Document("$set", new Document("status", "running").append("resetTimestamp", resetTimestamp).append("progress", 0.0));
         final Document fields = new Document("payload", 1);
 
-        calendar.setTimeInMillis(System.currentTimeMillis());
-        calendar.add(Calendar.MILLISECOND, waitDuration);
-        final Date end = calendar.getTime();
-
-        while (true) {
-            // final Document message = (Document) collection.findAndModify(builtQuery, fields, sort, false, update, true, false);
+        for (int pollAttempt = 0; pollAttempt < pollAttempts; pollAttempt++) {
+            final Document builtQuery = new Document("status", "queued");
+            query.entrySet().forEach((field) -> {
+                builtQuery.append("payload." + field.getKey(), field.getValue());
+            });
+            builtQuery.append("earliestGet", new Document("$lte", new Date()));
             FindOneAndUpdateOptions opts = new FindOneAndUpdateOptions().sort(sort).upsert(false).returnDocument(ReturnDocument.AFTER).projection(fields);
-            LOG.info("Querying: " + builtQuery.toJson());
+            LOG.log(Level.INFO, "Querying: {0}", builtQuery.toJson());
             final Document message = collection.findOneAndUpdate(builtQuery, update, opts);
             if (message != null) {
                 final ObjectId id = message.getObjectId("_id");
                 return ((Document) message.get("payload")).append("id", id.toHexString());
             }
-
-            if (new Date().compareTo(end) >= 0) {
+            try {
+                Thread.sleep(waitDuration);
+            } catch (InterruptedException | IllegalArgumentException ex) {
                 return null;
             }
-
-            try {
-                if (pollDuration == 0) {
-                    continue;
-                }
-                Thread.sleep(pollDuration);
-            } catch (final InterruptedException ex) {
-                throw new RuntimeException(ex);
-            } catch (final IllegalArgumentException ex) {
-                pollDuration = 0;
-            }
         }
+        return null;
     }
 
     /**
@@ -305,29 +260,6 @@ final class MongoQueueCore {
     }
 
     /**
-     * Ack message and send payload to queue, atomically, with earliestGet as
-     * Now and 0.0 priority
-     *
-     * @param message message to ack received from get(). Should not be null
-     * @param payload payload to send. Should not be null
-     */
-    public void ackSend(final Document message, final Document payload) {
-        ackSend(message, payload, new Date());
-    }
-
-    /**
-     * Ack message and send payload to queue, atomically, with 0.0 priority
-     *
-     * @param message message to ack received from get(). Should not be null
-     * @param payload payload to send. Should not be null
-     * @param earliestGet earliest instant that a call to get() can return
-     * message. Should not be null
-     */
-    public void ackSend(final Document message, final Document payload, final Date earliestGet) {
-        ackSend(message, payload, earliestGet, 0.0);
-    }
-
-    /**
      * Ack message and send payload to queue, atomically
      *
      * @param message message to ack received from get(). Should not be null
@@ -363,28 +295,6 @@ final class MongoQueueCore {
     }
 
     /**
-     * Requeue message with earliestGet as Now and 0.0 priority. Same as
-     * ackSend() with the same message.
-     *
-     * @param message message to requeue received from get(). Should not be null
-     */
-    public void requeue(final Document message) {
-        requeue(message, new Date());
-    }
-
-    /**
-     * Requeue message with 0.0 priority. Same as ackSend() with the same
-     * message.
-     *
-     * @param message message to requeue received from get(). Should not be null
-     * @param earliestGet earliest instant that a call to get() can return
-     * message. Should not be null
-     */
-    public void requeue(final Document message, final Date earliestGet) {
-        requeue(message, earliestGet, 0.0);
-    }
-
-    /**
      * Requeue message. Same as ackSend() with the same message.
      *
      * @param message message to requeue received from get(). Should not be null
@@ -405,28 +315,6 @@ final class MongoQueueCore {
         final Document forRequeue = new Document(message);
         forRequeue.remove("id");
         ackSend(message, forRequeue, earliestGet, priority);
-    }
-
-    /**
-     * Send message to queue with earliestGet as Now and 0.0 priority
-     *
-     * @param payload payload. Should not be null
-     * @return hex string of the message id
-     */
-    public String send(final Document payload) {
-        return send(payload, new Date());
-    }
-
-    /**
-     * Send message to queue with 0.0 priority
-     *
-     * @param payload payload. Should not be null
-     * @param earliestGet earliest instant that a call to Get() can return
-     * message. Should not be null
-     * @return hex string of the message id
-     */
-    public String send(final Document payload, final Date earliestGet) {
-        return send(payload, earliestGet, 0.0);
     }
 
     /**
@@ -454,16 +342,16 @@ final class MongoQueueCore {
                 .append("log", new BsonArray())
                 .append("progress", 0.0)
                 .append("attempt", 0);
-        LOG.info("Inserting: " + message.toJson());
+        LOG.log(Level.INFO, "Inserting: {0}", message.toJson());
         collection.insertOne(message);
         return message.getObjectId("_id").toHexString();
     }
 
-    public void progress(String id, Collection<String> log, double progress, int resetDuration) {
+    public void progress(String id, Collection<String> log, double progress, int resetDuration, String worker) {
         final Calendar calendar = Calendar.getInstance();
         calendar.add(Calendar.SECOND, resetDuration);
         final Date resetTimestamp = calendar.getTime();
-        Document setters = new Document("status", "running").append("resetTimestamp", resetTimestamp);
+        Document setters = new Document("status", "running").append("resetTimestamp", resetTimestamp).append("worker", worker);
         if (progress >= 0.0) {
             setters.append("progress", progress);
         }

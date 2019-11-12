@@ -44,7 +44,7 @@ public class SubmitManyTest extends AbstractCauldronTest {
             @Override
             public void run() {
                 while (true) {
-                    AddingTask polledTask = getCauldron().poll(AddingTask.class);
+                    AddingTask polledTask = getCauldron().pollWorker(AddingTask.class, "executor");
                     try {
                         polledTask.run(null);
                         getCauldron().completed(polledTask, CauldronStatus.Completed);

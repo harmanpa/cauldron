@@ -39,10 +39,12 @@ public class CauldronWorkerRunnable implements Runnable {
 
     private final Cauldron cauldron;
     private final Collection<Class<? extends CauldronTask>> taskTypes;
+    private final String name;
 
-    public CauldronWorkerRunnable(Cauldron cauldron, Collection<Class<? extends CauldronTask>> taskTypes) {
+    public CauldronWorkerRunnable(Cauldron cauldron, Collection<Class<? extends CauldronTask>> taskTypes, String name) {
         this.cauldron = cauldron;
         this.taskTypes = taskTypes;
+        this.name = name;
     }
 
     @Override
@@ -50,8 +52,8 @@ public class CauldronWorkerRunnable implements Runnable {
     public void run() {
         while (true) {
             try {
-                CauldronTask task = cauldron.pollMulti(taskTypes).getTask();
-                CauldronCallback callback = new WorkerCallback(cauldron, task.getId());
+                CauldronTask task = cauldron.pollMultiWorker(taskTypes, name).getTask();
+                CauldronCallback callback = new WorkerCallback(cauldron, task.getId(), name);
                 try {
                     task.run(callback);
                     callback.progress(1.0);
@@ -73,13 +75,15 @@ public class CauldronWorkerRunnable implements Runnable {
         private long lastLog;
         private double progress;
         private final List<String> logs;
+        private final String name;
 
-        public WorkerCallback(Cauldron cauldron, String id) {
+        public WorkerCallback(Cauldron cauldron, String id, String name) {
             this.cauldron = cauldron;
             this.id = id;
             this.lastLog = 0L;
             this.progress = -1.0;
             this.logs = new ArrayList<>();
+            this.name = name;
         }
 
         @Override
@@ -103,7 +107,7 @@ public class CauldronWorkerRunnable implements Runnable {
 
         private void log(boolean force) {
             if (force || System.currentTimeMillis() - lastLog > 1000) {
-                cauldron.progress(id, logs, progress, 1000);
+                cauldron.progress(id, logs, progress, 1000, name);
                 logs.clear();
                 lastLog = System.currentTimeMillis();
             }

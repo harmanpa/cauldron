@@ -44,16 +44,19 @@ public class CloudRunResponse {
     private List<String> log;
     @JsonProperty
     private boolean success;
+    @JsonProperty
+    private String worker;
 
     public CloudRunResponse() {
     }
 
-    public CloudRunResponse(String taskId, CauldronTask task, double progress, List<String> log, boolean success) {
+    public CloudRunResponse(String taskId, CauldronTask task, double progress, List<String> log, boolean success, String worker) {
         this.taskId = taskId;
         this.task = task;
         this.progress = progress;
         this.log = log;
         this.success = success;
+        this.worker = worker;
     }
 
     public CauldronTask getTask() {
@@ -74,6 +77,10 @@ public class CloudRunResponse {
 
     public boolean isSuccess() {
         return success;
+    }
+
+    public String getWorker() {
+        return worker;
     }
 
 }

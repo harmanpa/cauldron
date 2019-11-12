@@ -32,21 +32,22 @@ import java.util.logging.Logger;
 import org.glassfish.grizzly.http.server.HttpServer;
 import org.glassfish.jersey.grizzly2.httpserver.GrizzlyHttpServerFactory;
 import org.glassfish.jersey.server.ResourceConfig;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
  * @author peter
  */
 public class WorkerMain {
-    
-    public static HttpServer startServer() throws URISyntaxException, IOException {
-        final ResourceConfig rc = new ResourceConfig().register(WorkerResource.class);
-        int port = Integer.parseInt(System.getProperty("server.port", "80"));
+
+    public static HttpServer startServer() throws URISyntaxException, IOException, CauldronException {
+        final ResourceConfig rc = new ResourceConfig().register(new WorkerResource());
+        int port = System.getenv("PORT") == null ? 80 : Integer.parseInt(System.getenv("PORT"));
         HttpServer server = GrizzlyHttpServerFactory.createHttpServer(new URI("http", null, "localhost", port, null, null, null), rc);
         server.start();
         return server;
     }
-    
+
     public static void main(String[] args) {
         try {
             final HttpServer server = startServer();
@@ -59,6 +60,9 @@ public class WorkerMain {
             }));
         } catch (URISyntaxException | IOException ex) {
             Logger.getLogger(WorkerMain.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (CauldronException ex) {
+            Logger.getLogger(WorkerMain.class.getName()).log(Level.SEVERE, null, ex);
+            System.exit(-1);
         }
     }
 }
