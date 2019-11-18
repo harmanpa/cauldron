@@ -17,6 +17,13 @@
             <version>${project.version}</version>
         </dependency>
     </dependencies>
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>Github Cauldron</name>
+            <url>https://maven.pkg.github.com/harmanpa/cauldron</url>
+        </repository>
+    </distributionManagement>
     <build>
         <plugins>
             <plugin>
