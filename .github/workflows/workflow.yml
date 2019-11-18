@@ -45,7 +45,7 @@ jobs:
       run: mvn clean install
     
     - name: Deploy
-      run: mvn --settings settings.xml deploy -X -DskipTests=true
+      run: mvn  -B -e -Dmaven.wagon.http.pool=false --settings settings.xml deploy -X -DskipTests=true
       env:
           GITHUB_USERNAME: x-access-token
           GITHUB_PASSWORD: ${{ secrets.GITHUB_ACCESS_TOKEN }}
