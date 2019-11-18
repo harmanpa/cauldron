@@ -12,12 +12,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-
+      
+    - name: create version number
+      run: echo $(echo $GITHUB_SHA | cut -c1-7) > .version
+      
     - name: Build and tag image 1
-      run: docker build --target worker -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$GITHUB_SHA" .
+      run: docker build --target worker --build-arg BUILD_VERSION="$(cat .version)" -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat .version)" .
 
     - name: Build and tag image 2
-      run: docker build --target cloudrun -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$GITHUB_SHA" .
+      run: docker build --target cloudrun --build-arg BUILD_VERSION="$(cat .version)" -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat .version)" .
       
     - name: Docker login
       run: docker login docker.pkg.github.com -u $GITHUB_ACTOR -p $GITHUB_TOKEN
@@ -25,8 +28,19 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
     - name: Publish to GPR 1
-      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$GITHUB_SHA"
+      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat .version)"
       
     - name: Publish to GPR 2
-      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$GITHUB_SHA"
+      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat .version)"
+
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+
+    - name: set version
+      run: mvn versions:set -DnewVersion="$(cat .version)" -DprocessAllModules=true
+      
+    - name: Build with Maven
+      run: mvn package
       
