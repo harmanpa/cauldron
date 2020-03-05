@@ -1,9 +1,6 @@
 name: Publish Docker images
 
-on:
-  push:
-    branches:
-    - master
+on: [push]
 
 jobs:
   build:
@@ -11,16 +8,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
-      
-    - name: create version number
-      run: echo $(echo $GITHUB_SHA | cut -c1-7) > .version
-      
+    - uses: actions/checkout@v2
+    - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/* && git fetch --prune --unshallow
+    
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+
+    - name: Deploy
+      run: mvn  -B -e -Dmaven.wagon.http.pool=false --settings settings.xml deploy
+      env:
+          GITHUB_USERNAME: x-access-token
+          GITHUB_PASSWORD: ${{ secrets.GITHUB_ACCESS_TOKEN }}      
+
     - name: Build and tag image 1
-      run: docker build --target worker --build-arg BUILD_VERSION="$(cat .version)" -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat .version)" .
+      run: docker build --target worker -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat target/version.txt)" .
 
     - name: Build and tag image 2
-      run: docker build --target cloudrun --build-arg BUILD_VERSION="$(cat .version)" -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat .version)" .
+      run: docker build --target cloudrun -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat target/version.txt)" .
       
     - name: Docker login
       run: docker login docker.pkg.github.com -u $GITHUB_ACTOR -p $GITHUB_TOKEN
@@ -28,24 +34,7 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
     - name: Publish to GPR 1
-      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat .version)"
+      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat target/version.txt)"
       
     - name: Publish to GPR 2
-      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat .version)"
-
-    - name: Set up JDK 1.8
-      uses: actions/setup-java@v1
-      with:
-        java-version: 1.8
-
-    - name: set version
-      run: mvn versions:set -DnewVersion="$(cat .version)" -DprocessAllModules=true
-    
-    - name: Build and test
-      run: mvn clean install
-    
-    - name: Deploy
-      run: mvn  -B -e -Dmaven.wagon.http.pool=false --settings settings.xml deploy -X -DskipTests=true
-      env:
-          GITHUB_USERNAME: x-access-token
-          GITHUB_PASSWORD: ${{ secrets.GITHUB_ACCESS_TOKEN }}
+      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat target/version.txt)"
