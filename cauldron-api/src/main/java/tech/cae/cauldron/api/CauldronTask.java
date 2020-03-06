@@ -48,7 +48,7 @@ public abstract class CauldronTask {
     /**
      *
      * @param callback
-     * @throws tech.cae.cauldron.exceptions.CauldronException
+     * @throws tech.cae.cauldron.api.exceptions.CauldronException
      */
     public abstract void run(CauldronCallback callback) throws CauldronException;
 
