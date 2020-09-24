@@ -29,16 +29,30 @@ package tech.cae.cauldron.api;
  */
 public class CauldronConfiguration {
 
+    private final String dbUri;
     private final String dbHost;
     private final int dbPort;
     private final String dbName;
     private final String dbCollection;
 
+    public CauldronConfiguration(String dbUri, String dbName, String dbCollection) {
+        this(dbUri, null, 0, dbName, dbCollection);
+    }
+
     public CauldronConfiguration(String dbHost, int dbPort, String dbName, String dbCollection) {
+        this(null, dbHost, dbPort, dbName, dbCollection);
+    }
+
+    private CauldronConfiguration(String dbUri, String dbHost, int dbPort, String dbName, String dbCollection) {
+        this.dbUri = dbUri;
         this.dbHost = dbHost;
         this.dbPort = dbPort;
         this.dbName = dbName;
         this.dbCollection = dbCollection;
+    }
+
+    public String getDbUri() {
+        return dbUri;
     }
 
     public String getDbHost() {

@@ -27,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mongodb.MongoClient;
+import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import java.util.ArrayList;
@@ -83,7 +84,9 @@ public class Cauldron {
     }
 
     Cauldron(CauldronConfiguration configuration) {
-        this(new MongoClient(configuration.getDbHost(), configuration.getDbPort())
+        this((configuration.getDbUri() != null
+                ? new MongoClient(new MongoClientURI(configuration.getDbUri()))
+                : new MongoClient(configuration.getDbHost(), configuration.getDbPort()))
                 .getDatabase(configuration.getDbName()),
                 configuration.getDbCollection());
     }
