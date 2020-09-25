@@ -370,17 +370,16 @@ final class MongoQueueCore {
                 //so we use any generated name, and then find the right spec after we have called, and just go with that name.
 
                 IndexOptions iOpts = new IndexOptions().background(true).name(name);
-                collection.createIndex(index, iOpts);
-
                 for (final Document existingIndex : collection.listIndexes()) {
 
                     if (existingIndex.get("key").equals(index)) {
                         return;
                     }
                 }
+                collection.createIndex(index, iOpts);
             }
         }
-
-        throw new RuntimeException("couldnt create index after 5 attempts");
+        // Just warn, it will still work
+        LOG.warning("couldnt create index after 5 attempts");
     }
 }
