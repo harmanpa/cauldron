@@ -31,12 +31,10 @@ import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -132,6 +130,7 @@ public class Cauldron {
      *
      * @param <T>
      * @param taskType
+     * @param worker
      * @return
      */
     public <T extends CauldronTask> T pollWorker(Class<T> taskType, String worker) {
@@ -152,9 +151,9 @@ public class Cauldron {
      */
     public MultiTaskResponse pollMultiScheduler(Collection<Class<? extends CauldronTask>> taskTypes) {
         Map<String, Class<? extends CauldronTask>> typeMap = new HashMap<>(taskTypes.size());
-        for (Class<? extends CauldronTask> taskType : taskTypes) {
+        taskTypes.forEach((taskType) -> {
             typeMap.put(taskType.getName(), taskType);
-        }
+        });
         Document doc = null;
         while (doc == null) {
             doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, -1, 1000, true, "");
@@ -172,9 +171,9 @@ public class Cauldron {
      */
     public MultiTaskResponse pollMultiWorker(Collection<Class<? extends CauldronTask>> taskTypes, String worker) {
         Map<String, Class<? extends CauldronTask>> typeMap = new HashMap<>(taskTypes.size());
-        for (Class<? extends CauldronTask> taskType : taskTypes) {
+        taskTypes.forEach((taskType) -> {
             typeMap.put(taskType.getName(), taskType);
-        }
+        });
         Document doc = null;
         while (doc == null) {
             doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, -1, 1000, false, worker);
@@ -306,11 +305,6 @@ public class Cauldron {
         meta.setResetTimestamp(message.getDate("resetTimestamp"));
         meta.setStatus(message.getString("status"));
         meta.setAttempt(message.getInteger("attempt"));
-        if (message.get("log", BsonArray.class) == null) {
-            meta.setLog(Arrays.asList());
-        } else {
-            meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
-        }
         return meta;
     }
 
@@ -350,11 +344,6 @@ public class Cauldron {
                     meta.setResetTimestamp(message.getDate("resetTimestamp"));
                     meta.setStatus(message.getString("status"));
                     meta.setAttempt(message.getInteger("attempt"));
-                    if (message.get("log", BsonArray.class) == null) {
-                        meta.setLog(Arrays.asList());
-                    } else {
-                        meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
-                    }
                     return meta;
                 }
             };
@@ -383,11 +372,6 @@ public class Cauldron {
                     meta.setEarliestGet(message.getDate("earliestGet"));
                     meta.setResetTimestamp(message.getDate("resetTimestamp"));
                     meta.setStatus(message.getString("status"));
-//                    if (message.get("log", BsonArray.class) == null) {
-//                        meta.setLog(Arrays.asList());
-//                    } else {
-//                        meta.setLog(message.get("log", BsonArray.class).stream().map((bv) -> bv.asString().getValue()).collect(Collectors.toList()));
-//                    }
                     return meta;
                 }
             };
@@ -411,7 +395,10 @@ public class Cauldron {
             if (!completionCheckScheduled) {
                 scheduleCompletionCheck();
             }
-            return future;
+            return future.thenApply(t -> {
+                futures.remove(id);
+                return t;
+            });
         }
         return otherFuture;
     }
@@ -461,8 +448,6 @@ public class Cauldron {
         private double priority;
         @JsonProperty
         private double progress;
-        @JsonProperty
-        private List<String> log;
         @JsonProperty
         private int attempt;
 
@@ -531,14 +516,6 @@ public class Cauldron {
 
         void setProgress(double progress) {
             this.progress = progress;
-        }
-
-        public List<String> getLog() {
-            return log;
-        }
-
-        void setLog(List<String> log) {
-            this.log = log;
         }
 
         public int getAttempt() {
