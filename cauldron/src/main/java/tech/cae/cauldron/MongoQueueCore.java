@@ -182,7 +182,7 @@ final class MongoQueueCore {
             });
             builtQuery.append("earliestGet", new Document("$lte", new Date()));
             FindOneAndUpdateOptions opts = new FindOneAndUpdateOptions().sort(sort).upsert(false).returnDocument(ReturnDocument.AFTER).projection(fields);
-            LOG.log(Level.INFO, "Querying: {0}", builtQuery.toJson());
+            LOG.log(Level.FINE, "Querying: {0}", builtQuery.toJson());
             final Document message = collection.findOneAndUpdate(builtQuery, update, opts);
             if (message != null) {
                 final ObjectId id = message.getObjectId("_id");

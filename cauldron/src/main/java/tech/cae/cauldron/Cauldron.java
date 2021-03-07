@@ -119,7 +119,7 @@ public class Cauldron {
         LOG.info("Requesting a task");
         Document doc = null;
         while (doc == null) {
-            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 1000, true, "");
+            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 100, true, "");
         }
         LOG.info("Returning a task");
         return deserialize(doc, taskType);
@@ -137,7 +137,7 @@ public class Cauldron {
         LOG.info("Requesting a task");
         Document doc = null;
         while (doc == null) {
-            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 1000, false, worker);
+            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 100, false, worker);
         }
         LOG.info("Returning a task");
         return deserialize(doc, taskType);
@@ -156,7 +156,7 @@ public class Cauldron {
         });
         Document doc = null;
         while (doc == null) {
-            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, -1, 1000, true, "");
+            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, 1000, 100, true, "");
         }
         Class<? extends CauldronTask> taskType = typeMap.get(doc.getString("type"));
         return new MultiTaskResponse(taskType, deserialize(doc, taskType));
@@ -176,7 +176,7 @@ public class Cauldron {
         });
         Document doc = null;
         while (doc == null) {
-            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, -1, 1000, false, worker);
+            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, 1000, 100, false, worker);
         }
         Class<? extends CauldronTask> taskType = typeMap.get(doc.getString("type"));
         return new MultiTaskResponse(taskType, deserialize(doc, taskType));
