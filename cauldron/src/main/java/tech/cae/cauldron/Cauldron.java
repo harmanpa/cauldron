@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -182,6 +183,10 @@ public class Cauldron {
         return new MultiTaskResponse(taskType, deserialize(doc, taskType));
     }
 
+    public Distributor getDistributor(List<Class<? extends CauldronTask>> taskTypes) {
+        return new Distributor(this, taskTypes);
+    }
+
     public static class MultiTaskResponse {
 
         private final Class<? extends CauldronTask> taskType;
@@ -210,6 +215,13 @@ public class Cauldron {
      */
     public <T extends CauldronTask> SubmitResponse submit(T task) {
         return new SubmitResponse(queue.send(serialize(task), new Date(), 0.0));
+    }
+
+    public <T extends CauldronTask> List<SubmitResponse> submitMulti(List<T> tasks) {
+        return queue.sendMulti(
+                tasks.stream().map(task -> serialize(task))
+                        .collect(Collectors.toList()), new Date(), 0.0).stream()
+                .map(id -> new SubmitResponse(id)).collect(Collectors.toList());
     }
 
     /**

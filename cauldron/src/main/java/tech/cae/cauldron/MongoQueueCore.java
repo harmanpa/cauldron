@@ -29,9 +29,11 @@ import com.mongodb.client.model.FindOneAndUpdateOptions;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.ReturnDocument;
 import com.mongodb.client.model.UpdateOptions;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -343,6 +345,32 @@ final class MongoQueueCore {
         LOG.log(Level.INFO, "Inserting: {0}", message.toJson());
         collection.insertOne(message);
         return message.getObjectId("_id").toHexString();
+    }
+
+    public List<String> sendMulti(final List<Document> payloads, final Date earliestGet, final double priority) {
+        Objects.requireNonNull(payloads);
+        Objects.requireNonNull(earliestGet);
+        if (Double.isNaN(priority)) {
+            throw new IllegalArgumentException("priority was NaN");
+        }
+        if (payloads.isEmpty()) {
+            return Arrays.asList();
+        }
+        List<Document> messages = payloads.stream().map(payload -> {
+            final Document message = new Document("payload", payload)
+                    .append("status", "queued")
+                    .append("resetTimestamp", new Date(Long.MAX_VALUE))
+                    .append("earliestGet", earliestGet)
+                    .append("priority", priority)
+                    .append("created", new Date())
+                    .append("log", new BsonArray())
+                    .append("progress", 0.0)
+                    .append("attempt", 0);
+            LOG.log(Level.INFO, "Inserting: {0}", message.toJson());
+            return message;
+        }).collect(Collectors.toList());
+        collection.insertMany(messages);
+        return messages.stream().map(message -> message.getObjectId("_id").toHexString()).collect(Collectors.toList());
     }
 
     public void progress(String id, Collection<String> log, double progress, int resetDuration, String worker) {

@@ -24,9 +24,9 @@
 package tech.cae.cauldron.worker;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import tech.cae.cauldron.Cauldron;
+import tech.cae.cauldron.Distributor;
 import tech.cae.cauldron.api.CauldronCallback;
 import tech.cae.cauldron.api.CauldronStatus;
 import tech.cae.cauldron.api.CauldronTask;
@@ -38,21 +38,26 @@ import tech.cae.cauldron.api.CauldronTask;
 public class CauldronWorkerRunnable implements Runnable {
 
     private final Cauldron cauldron;
-    private final Collection<Class<? extends CauldronTask>> taskTypes;
     private final String name;
+    private final Distributor distributor;
+    private boolean cancelled = false;
 
-    public CauldronWorkerRunnable(Cauldron cauldron, Collection<Class<? extends CauldronTask>> taskTypes, String name) {
+    public CauldronWorkerRunnable(Cauldron cauldron, Distributor distributor, String name) {
         this.cauldron = cauldron;
-        this.taskTypes = taskTypes;
+        this.distributor = distributor;
         this.name = name;
+    }
+
+    public CauldronWorkerRunnable(Cauldron cauldron, List<Class<? extends CauldronTask>> taskTypes, String name) {
+        this(cauldron, cauldron.getDistributor(taskTypes), name);
     }
 
     @Override
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     public void run() {
-        while (true) {
+        while (!cancelled) {
             try {
-                CauldronTask task = cauldron.pollMultiWorker(taskTypes, name).getTask();
+                CauldronTask task = distributor.get(name).getTask();
                 CauldronCallback callback = new WorkerCallback(cauldron, task.getId(), name);
                 try {
                     task.run(callback);
@@ -66,6 +71,11 @@ public class CauldronWorkerRunnable implements Runnable {
                 ex.printStackTrace();
             }
         }
+    }
+
+    public void shutdown() {
+        this.cancelled = true;
+        this.distributor.shutdown();
     }
 
     class WorkerCallback implements CauldronCallback {

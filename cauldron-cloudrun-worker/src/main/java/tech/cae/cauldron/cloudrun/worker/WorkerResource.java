@@ -55,10 +55,9 @@ public class WorkerResource {
     private final Publisher publisher;
     private final String name;
 
-    @SuppressWarnings("Convert2Diamond")
     public WorkerResource() throws IOException, CauldronException {
         CloudRunConfiguration configuration = CloudRunConfigurationProvider.get();
-        this.callback = new ThreadLocal<WorkerCallback>();
+        this.callback = new ThreadLocal<>();
         this.publisher = Publisher.newBuilder(
                 ProjectTopicName.of(configuration.getProjectId(),
                         configuration.getResponseTopic())).build();
@@ -94,7 +93,7 @@ public class WorkerResource {
         private final List<String> logs;
         private CauldronTask task;
         private boolean success;
-        private String name;
+        private final String name;
 
         WorkerCallback(String taskId, Publisher publisher, String name) {
             this.taskId = taskId;

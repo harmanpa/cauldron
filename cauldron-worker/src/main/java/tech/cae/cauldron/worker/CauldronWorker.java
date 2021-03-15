@@ -23,7 +23,8 @@
  */
 package tech.cae.cauldron.worker;
 
-import java.util.Collection;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,12 +43,24 @@ public class CauldronWorker {
 
     private final ExecutorService service;
     private final String name;
+    private final List<CauldronWorkerRunnable> running;
 
-    public CauldronWorker(Cauldron cauldron, int parallelism, Collection<Class<? extends CauldronTask>> taskTypes) {
+    public CauldronWorker() throws CauldronException {
+        this(new ArrayList<>(CauldronTaskTypeProvider.getAllTaskTypes()));
+    }
+
+    public CauldronWorker(List<Class<? extends CauldronTask>> taskTypes) throws CauldronException {
+        this(Cauldron.get(), Runtime.getRuntime().availableProcessors(), taskTypes);
+    }
+
+    public CauldronWorker(Cauldron cauldron, int parallelism, List<Class<? extends CauldronTask>> taskTypes) {
         this.service = Executors.newFixedThreadPool(parallelism);
         this.name = UUID.randomUUID().toString();
+        this.running = new ArrayList<>();
         for (int i = 0; i < parallelism; i++) {
-            this.service.submit(new CauldronWorkerRunnable(cauldron, taskTypes, name + ":" + Integer.toString(i + 1)));
+            CauldronWorkerRunnable runner = new CauldronWorkerRunnable(cauldron, taskTypes, name + ":" + Integer.toString(i + 1));
+            this.service.submit(runner);
+            this.running.add(runner);
         }
     }
 
@@ -56,7 +69,7 @@ public class CauldronWorker {
             final CauldronWorker worker = new CauldronWorker(
                     Cauldron.get(),
                     Runtime.getRuntime().availableProcessors(),
-                    CauldronTaskTypeProvider.getAllTaskTypes());
+                    new ArrayList<>(CauldronTaskTypeProvider.getAllTaskTypes()));
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 worker.shutdown(false);
             }));
@@ -66,6 +79,7 @@ public class CauldronWorker {
     }
 
     public void shutdown(boolean force) {
+        this.running.forEach(runner -> runner.shutdown());
         if (force) {
             this.service.shutdownNow();
         } else {
