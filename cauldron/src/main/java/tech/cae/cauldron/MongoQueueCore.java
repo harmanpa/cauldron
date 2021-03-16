@@ -269,7 +269,7 @@ final class MongoQueueCore {
      * @param priority priority for order out of get(). 0 is higher priority
      * than 1. Should not be NaN
      */
-    public void ackSend(final Document message, final Document payload, final Date earliestGet, final double priority) {
+    public String ackSend(final Document message, final Document payload, final Date earliestGet, final double priority) {
         Objects.requireNonNull(message);
         Objects.requireNonNull(payload);
         Objects.requireNonNull(earliestGet);
@@ -292,6 +292,7 @@ final class MongoQueueCore {
         //using upsert because if no documents found then the doc was removed (SHOULD ONLY HAPPEN BY SOMEONE MANUALLY) so we can just send
         //collection.update(new Document("_id", id), newMessage, true, false);
         collection.updateOne(Filters.eq("_id", new ObjectId(id)), newMessage, new UpdateOptions().upsert(true));
+        return id;
     }
 
     /**
@@ -303,7 +304,7 @@ final class MongoQueueCore {
      * @param priority priority for order out of get(). 0 is higher priority
      * than 1. Should not be NaN
      */
-    public void requeue(final Document message, final Date earliestGet, final double priority) {
+    public String requeue(final Document message, final Date earliestGet, final double priority) {
         Objects.requireNonNull(message);
         Objects.requireNonNull(earliestGet);
         if (Double.isNaN(priority)) {
@@ -315,6 +316,7 @@ final class MongoQueueCore {
         final Document forRequeue = new Document(message);
         forRequeue.remove("id");
         ackSend(message, forRequeue, earliestGet, priority);
+        return id;
     }
 
     /**

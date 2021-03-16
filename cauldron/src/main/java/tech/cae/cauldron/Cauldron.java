@@ -31,6 +31,7 @@ import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -47,6 +48,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.bson.BsonArray;
 import org.bson.BsonObjectId;
+import org.bson.BsonString;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import tech.cae.cauldron.api.CauldronConfiguration;
@@ -217,6 +219,15 @@ public class Cauldron {
         return new SubmitResponse(queue.send(serialize(task), new Date(), 0.0));
     }
 
+    public <T extends CauldronTask> SubmitResponse resubmit(String id) throws CauldronException {
+        Iterator<Document> it = collection.find(new Document("_id", new ObjectId(id))).iterator();
+        if (it.hasNext()) {
+            Document message = it.next();
+            return new SubmitResponse(queue.requeue(message, new Date(), 0.0));
+        }
+        throw new CauldronException("No such task");
+    }
+
     public <T extends CauldronTask> List<SubmitResponse> submitMulti(List<T> tasks) {
         return queue.sendMulti(
                 tasks.stream().map(task -> serialize(task))
@@ -233,7 +244,7 @@ public class Cauldron {
     public <T extends CauldronTask> void completed(T task, CauldronStatus status) {
         queue.ack(serialize(task), status.toString());
     }
-
+    
     public void progress(String id, Collection<String> log, double progress, int resetDuration, String worker) {
         queue.progress(id, log, progress, resetDuration, worker);
     }
@@ -320,8 +331,16 @@ public class Cauldron {
         return meta;
     }
 
+    public List<String> getTaskLogs(String id) {
+        Document message = collection.find(new Document("_id", new ObjectId(id))).first();
+        if (message == null) {
+            return Arrays.asList();
+        }
+        return message.getList("log", String.class, Arrays.asList());
+    }
+
     public Iterable<TaskMeta> getTasksMetaData() {
-        return getTasksMetaData(null, new HashMap<>());
+        return getTasksMetaData(Arrays.asList(), new HashMap<>());
     }
 
     public Iterable<TaskMeta> getTasksMetaData(String status) {
@@ -329,12 +348,20 @@ public class Cauldron {
     }
 
     public Iterable<TaskMeta> getTasksMetaData(Map<String, String> payloadQuery) {
-        return getTasksMetaData(null, payloadQuery);
+        return getTasksMetaData(Arrays.asList(), payloadQuery);
     }
 
     public Iterable<TaskMeta> getTasksMetaData(String status, Map<String, String> payloadQuery) {
+        return getTasksMetaData(Arrays.asList(status), payloadQuery);
+    }
+
+    public Iterable<TaskMeta> getTasksMetaData(List<String> statuses, Map<String, String> payloadQuery) {
         return () -> {
-            Document query = status == null ? new Document() : new Document("status", status);
+            Document query = statuses == null || statuses.isEmpty()
+                    ? new Document()
+                    : (statuses.size() == 1
+                    ? new Document("status", statuses.get(0))
+                    : new Document("status", new Document("$in", new BsonArray(statuses.stream().map(s -> new BsonString(s)).collect(Collectors.toList())))));
             payloadQuery.forEach((key, value) -> query.append("payload." + key, value));
             Iterator<Document> it = collection.find(query).iterator();
             return new Iterator<TaskMeta>() {
