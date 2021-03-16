@@ -47,7 +47,7 @@
             <url>https://maven.pkg.github.com/harmanpa/cauldron</url>
         </repository>
     </distributionManagement>
-    <build>
+<!--    <build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -77,5 +77,5 @@
                 </executions>
             </plugin>
         </plugins>
-    </build>
+    </build>-->
 </project>

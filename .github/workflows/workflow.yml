@@ -23,16 +23,16 @@ jobs:
       env:
           GITHUB_USERNAME: harmanpa
           GITHUB_PASSWORD: ${{ secrets.GITHUB_ACCESS_TOKEN }}      
-    - name: Build and tag image 1
-      run: docker build --target worker -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat target/version.txt)" .
+#    - name: Build and tag image 1
+#      run: docker build --target worker -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat target/version.txt)" .
     - name: Build and tag image 2
       run: docker build --target cloudrun -t "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat target/version.txt)" .
     - name: Docker login
       run: docker login docker.pkg.github.com -u $GITHUB_ACTOR -p $GITHUB_TOKEN
       env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-    - name: Publish to GPR 1
-      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat target/version.txt)"
+#    - name: Publish to GPR 1
+#      run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-worker:$(cat target/version.txt)"
     - name: Publish to GPR 2
       run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/cauldron-cloudrun-worker:$(cat target/version.txt)"
     - name: Deploy javadoc
