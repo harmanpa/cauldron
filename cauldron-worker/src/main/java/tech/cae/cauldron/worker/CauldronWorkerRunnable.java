@@ -104,7 +104,9 @@ public class CauldronWorkerRunnable implements Runnable {
 
         @Override
         public void progress(String message, double progress) {
-            logs.add(message);
+            if (message != null) {
+                logs.add(message);
+            }
             this.progress = progress;
             log(progress >= 1.0);
         }

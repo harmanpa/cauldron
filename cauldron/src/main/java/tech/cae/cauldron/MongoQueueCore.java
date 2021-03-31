@@ -385,7 +385,7 @@ final class MongoQueueCore {
         }
         Document update = new Document("$set", setters);
         if (!log.isEmpty()) {
-            update.append("$push", new Document("log", new Document("$each", new BsonArray(log.stream().map((s) -> new BsonString(s)).collect(Collectors.toList())))));
+            update.append("$push", new Document("log", new Document("$each", new BsonArray(log.stream().filter(s -> s != null && !s.trim().isEmpty()).map((s) -> new BsonString(s.trim())).collect(Collectors.toList())))));
         }
         collection.findOneAndUpdate(Filters.eq("_id", new ObjectId(id)), update);
     }
