@@ -25,7 +25,6 @@ package tech.cae.cauldron.api;
 
 import java.util.Iterator;
 import java.util.ServiceLoader;
-import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
@@ -35,11 +34,11 @@ public abstract class CauldronConfigurationProvider {
 
     public abstract CauldronConfiguration getConfiguration();
 
-    public static CauldronConfiguration get() throws CauldronException {
+    public static CauldronConfiguration get() {
         Iterator<CauldronConfigurationProvider> it = ServiceLoader.load(CauldronConfigurationProvider.class).iterator();
         if (it.hasNext()) {
             return it.next().getConfiguration();
         }
-        throw new CauldronException("No CauldronConfigurationProvider found");
+        return new CauldronConfiguration();
     }
 }

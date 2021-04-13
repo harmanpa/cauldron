@@ -37,10 +37,10 @@ import tech.cae.cauldron.api.exceptions.CauldronException;
  * @author peter
  */
 public class SubmitManyTest extends AbstractCauldronTest {
-    
+
     @Test
     public void test() throws CauldronException, InterruptedException, ExecutionException {
-        CauldronWorker worker = new CauldronWorker(getCauldron(), Runtime.getRuntime().availableProcessors(), Arrays.asList(AddingTask.class));
+        CauldronWorker worker = new CauldronWorker(getCauldron(), Runtime.getRuntime().availableProcessors());
         List<CompletableFuture<CauldronTask>> futures = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
@@ -52,7 +52,7 @@ public class SubmitManyTest extends AbstractCauldronTest {
         }
         worker.shutdown(false);
     }
-    
+
     private CompletableFuture<CauldronTask> submit(double a, double b) throws CauldronException {
         AddingTask task = new AddingTask();
         task.setA(a);

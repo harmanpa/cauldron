@@ -35,8 +35,12 @@ public class CauldronConfiguration {
     private final String dbName;
     private final String dbCollection;
 
+    public CauldronConfiguration() {
+        this("localhost", "test", "tasks");
+    }
+
     public CauldronConfiguration(String dbUri, String dbName, String dbCollection) {
-        this(dbUri, null, 0, dbName, dbCollection);
+        this(dbUri, null, 27017, dbName, dbCollection);
     }
 
     public CauldronConfiguration(String dbHost, int dbPort, String dbName, String dbCollection) {

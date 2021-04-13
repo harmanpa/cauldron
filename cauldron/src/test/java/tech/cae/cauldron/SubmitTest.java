@@ -26,6 +26,8 @@ package tech.cae.cauldron;
 import java.util.concurrent.ExecutionException;
 import org.junit.Test;
 import tech.cae.cauldron.api.CauldronStatus;
+import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
@@ -34,16 +36,17 @@ import tech.cae.cauldron.api.CauldronStatus;
 public class SubmitTest extends AbstractCauldronTest {
 
     @Test
-    public void test() throws InterruptedException, ExecutionException {
+    public void test() throws InterruptedException, ExecutionException, CauldronException {
         Thread thread2 = new Thread(new Runnable() {
             @Override
             public void run() {
-                MyTask polledTask = getCauldron().pollWorker(MyTask.class, "thread2");
+                CauldronTask polledTask = null;
                 try {
+                    polledTask = Cauldron.get().getDistributor().get("thread2");
                     polledTask.run(null);
-                    getCauldron().completed(polledTask, CauldronStatus.Completed);
+                    Cauldron.get().completed(polledTask, CauldronStatus.Completed);
                 } catch (Throwable ex) {
-                    getCauldron().completed(polledTask, CauldronStatus.Failed);
+                    Cauldron.get().completed(polledTask, CauldronStatus.Failed);
                 }
             }
         });
@@ -51,9 +54,9 @@ public class SubmitTest extends AbstractCauldronTest {
         MyTask task = new MyTask();
         task.setInput("bananas");
         //getCauldron().submit(task);
-        MyTask task2 = (MyTask)getCauldron().getCompletion(getCauldron().submit(task).getId()).get();
+        MyTask task2 = (MyTask) Cauldron.get().getCompletion(Cauldron.get().submit(task).getId()).get();
         System.out.println(task2.getOutput());
-        thread2.join();
+        thread2.interrupt();
 //        for (MyTask task2 : getCauldron().getTasks(MyTask.class)) {
 //            System.out.println(task2.getOutput());
 //        }

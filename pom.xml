@@ -9,12 +9,13 @@
         <module>cauldron-api</module>
         <module>cauldron</module>
         <module>cauldron-worker</module>
-        <module>cauldron-cloudrun-base</module>
-        <module>cauldron-cloudrun</module>
-        <module>cauldron-cloudrun-worker</module>
     </modules>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jackson.version>2.12.2</jackson.version>
+        <mongo.version>4.2.1</mongo.version>
+        <junit.version>4.13.2</junit.version>
+        <testcontainers.version>1.15.2</testcontainers.version>
     </properties>
     <distributionManagement>
         <repository>

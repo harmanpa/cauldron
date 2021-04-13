@@ -160,7 +160,7 @@ final class MongoQueueCore {
      * @return message or null
      */
     @SuppressWarnings("SleepWhileInLoop")
-    public Document get(final Document query, final int resetDuration, final int waitDuration, int pollAttempts, boolean scheduler, String worker) {
+    public Document get(final Document query, final int resetDuration, final int waitDuration, int pollAttempts, String worker) {
         Objects.requireNonNull(query);
 
         //reset stuck messages
@@ -216,7 +216,7 @@ final class MongoQueueCore {
             completeQuery.append("payload." + field.getKey(), field.getValue());
         });
 
-        return collection.count(completeQuery);
+        return collection.countDocuments(completeQuery);
     }
 
     /**
@@ -237,7 +237,7 @@ final class MongoQueueCore {
             completeQuery.append("payload." + field.getKey(), field.getValue());
         });
 
-        return collection.count(completeQuery);
+        return collection.countDocuments(completeQuery);
     }
 
     /**
@@ -253,9 +253,15 @@ final class MongoQueueCore {
         collection.findOneAndUpdate(new Document("_id", new ObjectId(id)),
                 new Document("$set", new Document("status", status).append("payload", message)));
 
+        // TODO: 2 steps here: use $pull to remove this id from any parent arrays
+        collection.updateMany(new Document(),
+                new Document("$pull", new Document("parent", id)),
+                new UpdateOptions().upsert(false));
+        // Then update any tasks with status "blocked" and an empty parent array to be queued
+
         //bump any blocked messages onto queue or mark as failed
-        collection.updateMany(new Document("status", "blocked").append("parent", id),
-                new Document("$set", new Document("status", "completed".equals(status) ? "queued" : "failed")),
+        collection.updateMany(new Document("status", "blocked").append("'parent.0'", new Document("$exists", false)),
+                new Document("$set", new Document("status", "queued")),
                 new UpdateOptions().upsert(false));
     }
 
@@ -329,16 +335,17 @@ final class MongoQueueCore {
      * than 1. Should not be NaN
      * @return hex string of the message id
      */
-    public String send(final Document payload, final Date earliestGet, final double priority) {
+    public String send(final Document payload, final Date earliestGet, final double priority, final List<String> parents) {
         Objects.requireNonNull(payload);
         Objects.requireNonNull(earliestGet);
         if (Double.isNaN(priority)) {
             throw new IllegalArgumentException("priority was NaN");
         }
         final Document message = new Document("payload", payload)
-                .append("status", "queued")
+                .append("status", parents.isEmpty() ? "queued" : "blocked")
                 .append("resetTimestamp", new Date(Long.MAX_VALUE))
                 .append("earliestGet", earliestGet)
+                .append("parents", parents)
                 .append("priority", priority)
                 .append("created", new Date())
                 .append("log", new BsonArray())

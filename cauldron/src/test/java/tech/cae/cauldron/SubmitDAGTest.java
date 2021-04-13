@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 CAE Tech Limited.
+ * Copyright 2021 CAE Tech Limited.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,40 +23,39 @@
  */
 package tech.cae.cauldron;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import java.io.File;
-import java.io.IOException;
-import org.bson.Document;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import org.junit.Test;
+import tech.cae.cauldron.api.CauldronStatus;
+import tech.cae.cauldron.api.CauldronTask;
 import tech.cae.cauldron.api.exceptions.CauldronException;
-import tech.cae.cauldron.api.CauldronCallback;
 
 /**
  *
  * @author peter
  */
-public class SerializationTest extends AbstractCauldronTest {
+public class SubmitDAGTest extends AbstractCauldronTest {
 
     @Test
-    public void test() throws JsonProcessingException, CauldronException, IOException {
-        MyTask task = new MyTask();
-        task.setInput("Hello");
-        Document doc = Cauldron.get().serialize(task);
-        System.out.println(doc.toJson());
-        MyTask task2 = Cauldron.get().deserialize(doc, MyTask.class);
-        task2.run(new CauldronCallback() {
+    public void test() throws CauldronException, InterruptedException, ExecutionException {
+        Executors.newSingleThreadExecutor().submit(new Runnable() {
             @Override
-            public void log(String message) {
+            public void run() {
+                while (true) {
+                    CauldronTask polledTask = null;
+                    try {
+                        polledTask = Cauldron.get().getDistributor().get("executor");
+                        polledTask.run(null);
+                        Cauldron.get().completed(polledTask, CauldronStatus.Completed);
+                    } catch (Throwable ex) {
+                        Cauldron.get().completed(polledTask, CauldronStatus.Failed);
+                    }
+                }
             }
-
-            @Override
-            public void progress(String message, double progress) {
-            }
-
-            @Override
-            public void progress(double progress) {
-            }
-
         });
+        SillyTask first = new SillyTask("FIRST");
+        CauldronDAG dag = CauldronDAG.create(new SillyTask("LAST")).after(CauldronDAG.create(new SillyTask("SECOND_ONE")).after(first));
+        Cauldron.get().getCompletion(dag.submit().getId()).get();
+
     }
 }

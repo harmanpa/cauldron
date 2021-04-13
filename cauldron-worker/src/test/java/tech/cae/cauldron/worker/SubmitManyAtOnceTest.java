@@ -41,7 +41,7 @@ public class SubmitManyAtOnceTest extends AbstractCauldronTest {
 
     @Test
     public void test() throws CauldronException, InterruptedException, ExecutionException {
-        CauldronWorker worker = new CauldronWorker(getCauldron(), Runtime.getRuntime().availableProcessors(), Arrays.asList(AddingTask.class));
+        CauldronWorker worker = new CauldronWorker(getCauldron(), Runtime.getRuntime().availableProcessors());
         List<CauldronTask> tasks = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {

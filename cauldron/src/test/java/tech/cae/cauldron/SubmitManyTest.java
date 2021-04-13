@@ -31,6 +31,7 @@ import java.util.concurrent.Executors;
 import org.junit.Test;
 import tech.cae.cauldron.api.CauldronStatus;
 import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
@@ -39,17 +40,18 @@ import tech.cae.cauldron.api.CauldronTask;
 public class SubmitManyTest extends AbstractCauldronTest {
 
     @Test
-    public void test() throws InterruptedException, ExecutionException {
+    public void test() throws InterruptedException, ExecutionException, CauldronException {
         Executors.newSingleThreadExecutor().submit(new Runnable() {
             @Override
             public void run() {
                 while (true) {
-                    AddingTask polledTask = getCauldron().pollWorker(AddingTask.class, "executor");
+                    CauldronTask polledTask = null;
                     try {
+                        polledTask = Cauldron.get().getDistributor().get("executor");
                         polledTask.run(null);
-                        getCauldron().completed(polledTask, CauldronStatus.Completed);
+                        Cauldron.get().completed(polledTask, CauldronStatus.Completed);
                     } catch (Throwable ex) {
-                        getCauldron().completed(polledTask, CauldronStatus.Failed);
+                        Cauldron.get().completed(polledTask, CauldronStatus.Failed);
                     }
                 }
             }
@@ -65,10 +67,10 @@ public class SubmitManyTest extends AbstractCauldronTest {
         }
     }
 
-    private CompletableFuture<CauldronTask> submit(double a, double b) {
+    private CompletableFuture<CauldronTask> submit(double a, double b) throws CauldronException {
         AddingTask task = new AddingTask();
         task.setA(a);
         task.setB(b);
-        return getCauldron().getCompletion(getCauldron().submit(task).getId());
+        return Cauldron.get().getCompletion(Cauldron.get().submit(task).getId());
     }
 }

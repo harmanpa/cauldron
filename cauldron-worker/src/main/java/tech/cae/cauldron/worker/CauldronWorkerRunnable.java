@@ -30,6 +30,7 @@ import tech.cae.cauldron.Distributor;
 import tech.cae.cauldron.api.CauldronCallback;
 import tech.cae.cauldron.api.CauldronStatus;
 import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
@@ -48,8 +49,8 @@ public class CauldronWorkerRunnable implements Runnable {
         this.name = name;
     }
 
-    public CauldronWorkerRunnable(Cauldron cauldron, List<Class<? extends CauldronTask>> taskTypes, String name) {
-        this(cauldron, cauldron.getDistributor(taskTypes), name);
+    public CauldronWorkerRunnable(Cauldron cauldron, String name) throws CauldronException {
+        this(cauldron, cauldron.getDistributor(), name);
     }
 
     @Override
@@ -57,7 +58,7 @@ public class CauldronWorkerRunnable implements Runnable {
     public void run() {
         while (!cancelled) {
             try {
-                CauldronTask task = distributor.get(name).getTask();
+                CauldronTask task = distributor.get(name);
                 CauldronCallback callback = new WorkerCallback(cauldron, task.getId(), name);
                 try {
                     task.run(callback);
@@ -75,7 +76,6 @@ public class CauldronWorkerRunnable implements Runnable {
 
     public void shutdown() {
         this.cancelled = true;
-        this.distributor.shutdown();
     }
 
     class WorkerCallback implements CauldronCallback {

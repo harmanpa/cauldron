@@ -30,7 +30,7 @@ import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
-import java.util.ArrayList;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
@@ -39,11 +39,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.bson.BsonArray;
@@ -55,6 +50,7 @@ import tech.cae.cauldron.api.CauldronConfiguration;
 import tech.cae.cauldron.api.CauldronConfigurationProvider;
 import tech.cae.cauldron.api.CauldronStatus;
 import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.CauldronTaskTypeProvider;
 import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
@@ -69,18 +65,17 @@ public class Cauldron {
     private final ObjectMapper mapper;
     private final MongoQueueCore queue;
     private final MongoCollection<Document> collection;
-    private final ScheduledExecutorService completionMonitorService;
-    private final ConcurrentMap<String, CompletableFuture<CauldronTask>> futures;
-    private boolean completionCheckScheduled;
+    private Distributor distributor;
+    private StatusChangeMonitor changeMonitor;
 
-    public static Cauldron get() throws CauldronException {
+    public static Cauldron get() {
         if (INSTANCE == null) {
             INSTANCE = new Cauldron();
         }
         return INSTANCE;
     }
 
-    Cauldron() throws CauldronException {
+    Cauldron() {
         this(CauldronConfigurationProvider.get());
     }
 
@@ -97,9 +92,6 @@ public class Cauldron {
         this.collection = database.getCollection(queueCollection);
         this.queue = new MongoQueueCore(collection);
         this.queue.ensureGetIndex();
-        this.completionMonitorService = Executors.newSingleThreadScheduledExecutor();
-        this.futures = new ConcurrentHashMap<>();
-        this.completionCheckScheduled = false;
     }
 
     <T extends CauldronTask> Document serialize(T object) {
@@ -111,112 +103,31 @@ public class Cauldron {
         return mapper.convertValue(document, objectClass);
     }
 
-    /**
-     * Blocking call to get task of given type
-     *
-     * @param <T>
-     * @param taskType
-     * @return
-     */
-    public <T extends CauldronTask> T pollScheduler(Class<T> taskType) {
-        LOG.info("Requesting a task");
-        Document doc = null;
-        while (doc == null) {
-            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 100, true, "");
+    public Distributor getDistributor() throws CauldronException {
+        if (distributor == null) {
+            distributor = new Distributor(this, CauldronTaskTypeProvider.getAllTaskTypes());
         }
-        LOG.info("Returning a task");
-        return deserialize(doc, taskType);
+        return distributor;
     }
 
-    /**
-     * Blocking call to get task of given type
-     *
-     * @param <T>
-     * @param taskType
-     * @param worker
-     * @return
-     */
-    public <T extends CauldronTask> T pollWorker(Class<T> taskType, String worker) {
-        LOG.info("Requesting a task");
-        Document doc = null;
-        while (doc == null) {
-            doc = queue.get(new Document("type", taskType.getName()), 1000, 1000, 100, false, worker);
+    StatusChangeMonitor getChangeMonitor() {
+        if (changeMonitor == null) {
+            changeMonitor = new StatusChangeMonitor(collection, this);
+            changeMonitor.start();
         }
-        LOG.info("Returning a task");
-        return deserialize(doc, taskType);
+        return changeMonitor;
     }
 
-    /**
-     * Blocking call to get task of one of an array of given types
-     *
-     * @param taskTypes
-     * @return
-     */
-    public MultiTaskResponse pollMultiScheduler(Collection<Class<? extends CauldronTask>> taskTypes) {
-        Map<String, Class<? extends CauldronTask>> typeMap = new HashMap<>(taskTypes.size());
-        taskTypes.forEach((taskType) -> {
-            typeMap.put(taskType.getName(), taskType);
-        });
-        Document doc = null;
-        while (doc == null) {
-            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, 1000, 100, true, "");
-        }
-        Class<? extends CauldronTask> taskType = typeMap.get(doc.getString("type"));
-        return new MultiTaskResponse(taskType, deserialize(doc, taskType));
+    MongoQueueCore getMongoQueue() {
+        return queue;
     }
 
-    /**
-     * Blocking call to get task of one of an array of given types
-     *
-     * @param taskTypes
-     * @param worker
-     * @return
-     */
-    public MultiTaskResponse pollMultiWorker(Collection<Class<? extends CauldronTask>> taskTypes, String worker) {
-        Map<String, Class<? extends CauldronTask>> typeMap = new HashMap<>(taskTypes.size());
-        taskTypes.forEach((taskType) -> {
-            typeMap.put(taskType.getName(), taskType);
-        });
-        Document doc = null;
-        while (doc == null) {
-            doc = queue.get(new Document("type", new Document("$in", typeMap.keySet())), 1000, 1000, 100, false, worker);
-        }
-        Class<? extends CauldronTask> taskType = typeMap.get(doc.getString("type"));
-        return new MultiTaskResponse(taskType, deserialize(doc, taskType));
-    }
-
-    public Distributor getDistributor(List<Class<? extends CauldronTask>> taskTypes) {
-        return new Distributor(this, taskTypes);
-    }
-
-    public static class MultiTaskResponse {
-
-        private final Class<? extends CauldronTask> taskType;
-        private final CauldronTask task;
-
-        MultiTaskResponse(Class<? extends CauldronTask> taskType, CauldronTask task) {
-            this.taskType = taskType;
-            this.task = task;
-        }
-
-        public Class<? extends CauldronTask> getTaskType() {
-            return taskType;
-        }
-
-        public CauldronTask getTask() {
-            return task;
-        }
-
-    }
-
-    /**
-     *
-     * @param <T>
-     * @param task
-     * @return
-     */
     public <T extends CauldronTask> SubmitResponse submit(T task) {
-        return new SubmitResponse(queue.send(serialize(task), new Date(), 0.0));
+        return submit(task, 0, Arrays.asList());
+    }
+
+    <T extends CauldronTask> SubmitResponse submit(T task, long delay, List<String> parents) {
+        return new SubmitResponse(queue.send(serialize(task), Date.from(Instant.now().plusMillis(delay)), 0.0, parents));
     }
 
     public <T extends CauldronTask> SubmitResponse resubmit(String id) throws CauldronException {
@@ -244,7 +155,7 @@ public class Cauldron {
     public <T extends CauldronTask> void completed(T task, CauldronStatus status) {
         queue.ack(serialize(task), status.toString());
     }
-    
+
     public void progress(String id, Collection<String> log, double progress, int resetDuration, String worker) {
         queue.progress(id, log, progress, resetDuration, worker);
     }
@@ -314,7 +225,10 @@ public class Cauldron {
      * @return
      */
     public TaskMeta getTaskMeta(String id) {
-        Document message = collection.find(new Document("_id", new ObjectId(id))).first();
+        return deserializeMeta(collection.find(new Document("_id", new ObjectId(id))).first());
+    }
+
+    private TaskMeta deserializeMeta(Document message) {
         if (message == null) {
             return null;
         }
@@ -324,11 +238,28 @@ public class Cauldron {
         meta.setPriority(message.getDouble("priority"));
         meta.setProgress(message.getDouble("progress"));
         meta.setCreated(message.getDate("created"));
-        meta.setEarliestGet(message.getDate("earliestGet"));
         meta.setResetTimestamp(message.getDate("resetTimestamp"));
         meta.setStatus(message.getString("status"));
         meta.setAttempt(message.getInteger("attempt"));
         return meta;
+    }
+
+    private Iterable<TaskMeta> deserializeMeta(Iterable<Document> messages) {
+        return () -> deserializeMeta(messages.iterator());
+    }
+
+    private Iterator<TaskMeta> deserializeMeta(Iterator<Document> messages) {
+        return new Iterator<TaskMeta>() {
+            @Override
+            public boolean hasNext() {
+                return messages.hasNext();
+            }
+
+            @Override
+            public TaskMeta next() {
+                return deserializeMeta(messages.next());
+            }
+        };
     }
 
     public List<String> getTaskLogs(String id) {
@@ -356,65 +287,18 @@ public class Cauldron {
     }
 
     public Iterable<TaskMeta> getTasksMetaData(List<String> statuses, Map<String, String> payloadQuery) {
-        return () -> {
-            Document query = statuses == null || statuses.isEmpty()
-                    ? new Document()
-                    : (statuses.size() == 1
-                    ? new Document("status", statuses.get(0))
-                    : new Document("status", new Document("$in", new BsonArray(statuses.stream().map(s -> new BsonString(s)).collect(Collectors.toList())))));
-            payloadQuery.forEach((key, value) -> query.append("payload." + key, value));
-            Iterator<Document> it = collection.find(query).iterator();
-            return new Iterator<TaskMeta>() {
-                @Override
-                public boolean hasNext() {
-                    return it.hasNext();
-                }
-
-                @Override
-                public TaskMeta next() {
-                    Document message = it.next();
-                    TaskMeta meta = new TaskMeta();
-                    meta.setId(message.getObjectId("_id").toHexString());
-                    meta.setType(message.get("payload", Document.class).getString("type"));
-                    meta.setPriority(message.getDouble("priority"));
-                    meta.setProgress(message.getDouble("progress"));
-                    meta.setCreated(message.getDate("created"));
-                    meta.setEarliestGet(message.getDate("earliestGet"));
-                    meta.setResetTimestamp(message.getDate("resetTimestamp"));
-                    meta.setStatus(message.getString("status"));
-                    meta.setAttempt(message.getInteger("attempt"));
-                    return meta;
-                }
-            };
-        };
+        Document query = statuses == null || statuses.isEmpty()
+                ? new Document()
+                : (statuses.size() == 1
+                ? new Document("status", statuses.get(0))
+                : new Document("status", new Document("$in", new BsonArray(statuses.stream().map(s -> new BsonString(s)).collect(Collectors.toList())))));
+        payloadQuery.forEach((key, value) -> query.append("payload." + key, value));
+        return deserializeMeta(collection.find(query));
     }
 
-    private Iterable<TaskMeta> getTasksMetaData(Collection<String> ids) {
-        return () -> {
-            BsonArray idArray = new BsonArray(ids.stream().map((id) -> new BsonObjectId(new ObjectId(id))).collect(Collectors.toList()));
-            Iterator<Document> it = collection.find(new Document("_id", new Document("$in", idArray))).iterator();
-            return new Iterator<TaskMeta>() {
-                @Override
-                public boolean hasNext() {
-                    return it.hasNext();
-                }
-
-                @Override
-                public TaskMeta next() {
-                    Document message = it.next();
-                    TaskMeta meta = new TaskMeta();
-                    meta.setId(message.getObjectId("_id").toHexString());
-                    meta.setType(message.get("payload", Document.class).getString("type"));
-                    meta.setPriority(message.getDouble("priority"));
-                    meta.setProgress(message.getDouble("progress"));
-                    meta.setCreated(message.getDate("created"));
-                    meta.setEarliestGet(message.getDate("earliestGet"));
-                    meta.setResetTimestamp(message.getDate("resetTimestamp"));
-                    meta.setStatus(message.getString("status"));
-                    return meta;
-                }
-            };
-        };
+    Iterable<TaskMeta> getTasksMetaData(Collection<String> ids) {
+        BsonArray idArray = new BsonArray(ids.stream().map((id) -> new BsonObjectId(new ObjectId(id))).collect(Collectors.toList()));
+        return deserializeMeta(collection.find(new Document("_id", new Document("$in", idArray))));
     }
 
     /**
@@ -423,50 +307,10 @@ public class Cauldron {
      *
      * @param id Task id
      * @return
+     * @throws tech.cae.cauldron.api.exceptions.CauldronException
      */
-    public CompletableFuture<CauldronTask> getCompletion(String id) {
-        if (futures.containsKey(id)) {
-            return futures.get(id);
-        }
-        CompletableFuture<CauldronTask> future = new CompletableFuture<>();
-        CompletableFuture<CauldronTask> otherFuture = futures.putIfAbsent(id, future);
-        if (otherFuture == null) {
-            if (!completionCheckScheduled) {
-                scheduleCompletionCheck();
-            }
-            return future.thenApply(t -> {
-                futures.remove(id);
-                return t;
-            });
-        }
-        return otherFuture;
-    }
-
-    private void scheduleCompletionCheck() {
-        LOG.info("Scheduling completion check");
-        completionCheckScheduled = true;
-        completionMonitorService.schedule(() -> {
-            LOG.info("Running completion check");
-            // Fetch the data for the futures
-            getTasksMetaData(new ArrayList<>(futures.keySet())).forEach((task) -> {
-                switch (task.getStatus()) {
-                    case Completed:
-                    case Failed:
-                    case Cancelled:
-                        // Notify any completed or failed tasks and remove
-                        futures.remove(task.getId()).complete(getTask(task.getId(), CauldronTask.class));
-                        break;
-                    default:
-                }
-            });
-            // If futures is not empty schedule again
-            if (!futures.isEmpty()) {
-                scheduleCompletionCheck();
-            } else {
-                completionCheckScheduled = false;
-            }
-            LOG.info("Finished completion check");
-        }, 2, TimeUnit.SECONDS);
+    public CompletableFuture<CauldronTask> getCompletion(String id) throws CauldronException {
+        return getChangeMonitor().getCompletion(id);
     }
 
     public static class TaskMeta {
@@ -479,8 +323,6 @@ public class Cauldron {
         private String status;
         @JsonProperty
         private Date created;
-        @JsonProperty
-        private Date earliestGet;
         @JsonProperty
         private Date resetTimestamp;
         @JsonProperty
@@ -523,14 +365,6 @@ public class Cauldron {
 
         void setCreated(Date created) {
             this.created = created;
-        }
-
-        public Date getEarliestGet() {
-            return earliestGet;
-        }
-
-        void setEarliestGet(Date earliestGet) {
-            this.earliestGet = earliestGet;
         }
 
         public Date getResetTimestamp() {

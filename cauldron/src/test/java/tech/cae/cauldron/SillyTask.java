@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 CAE Tech Limited.
+ * Copyright 2021 CAE Tech Limited.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,66 +21,36 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package tech.cae.cauldron.cloudrun.base;
+package tech.cae.cauldron;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.List;
+import tech.cae.cauldron.api.CauldronCallback;
 import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
- * Combines the task and any payload with logs and status
  *
  * @author peter
  */
-public class CloudRunResponse {
+public class SillyTask extends CauldronTask {
 
     @JsonProperty
-    private String taskId;
-    @JsonProperty
-    private CauldronTask task;
-    @JsonProperty
-    private double progress;
-    @JsonProperty
-    private List<String> log;
-    @JsonProperty
-    private boolean success;
-    @JsonProperty
-    private String worker;
+    String thing;
 
-    public CloudRunResponse() {
+    public SillyTask() {
     }
 
-    public CloudRunResponse(String taskId, CauldronTask task, double progress, List<String> log, boolean success, String worker) {
-        this.taskId = taskId;
-        this.task = task;
-        this.progress = progress;
-        this.log = log;
-        this.success = success;
-        this.worker = worker;
+    public SillyTask(String thing) {
+        this.thing = thing;
     }
 
-    public CauldronTask getTask() {
-        return task;
+    public void setThing(String thing) {
+        this.thing = thing;
     }
 
-    public double getProgress() {
-        return progress;
-    }
-
-    public List<String> getLog() {
-        return log;
-    }
-
-    public String getTaskId() {
-        return taskId;
-    }
-
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public String getWorker() {
-        return worker;
+    @Override
+    public void run(CauldronCallback callback) throws CauldronException {
+        System.out.println(thing);
     }
 
 }

@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 CAE Tech Limited.
+ * Copyright 2021 CAE Tech Limited.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,25 +21,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package tech.cae.cauldron.cloudrun.base;
+package tech.cae.cauldron;
 
-import java.util.Iterator;
-import java.util.ServiceLoader;
-import tech.cae.cauldron.api.exceptions.CauldronException;
+import com.google.auto.service.AutoService;
+import java.util.Arrays;
+import java.util.Collection;
+import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.CauldronTaskTypeProvider;
 
 /**
  *
  * @author peter
  */
-public abstract class CloudRunConfigurationProvider {
+@AutoService(CauldronTaskTypeProvider.class)
+public class TestTypes extends CauldronTaskTypeProvider {
 
-    public abstract CloudRunConfiguration getConfiguration();
-
-    public static CloudRunConfiguration get() throws CauldronException {
-        Iterator<CloudRunConfigurationProvider> it = ServiceLoader.load(CloudRunConfigurationProvider.class).iterator();
-        if (it.hasNext()) {
-            return it.next().getConfiguration();
-        }
-        throw new CauldronException("No CloudRunConfigurationProvider found");
+    @Override
+    public Collection<Class<? extends CauldronTask>> getTaskTypes() {
+        return Arrays.asList(AddingTask.class, MyTask.class, SillyTask.class);
     }
+
 }

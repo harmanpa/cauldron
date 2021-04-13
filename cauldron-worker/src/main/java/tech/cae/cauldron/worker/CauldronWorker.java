@@ -31,8 +31,6 @@ import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import tech.cae.cauldron.Cauldron;
-import tech.cae.cauldron.api.CauldronTask;
-import tech.cae.cauldron.api.CauldronTaskTypeProvider;
 import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
@@ -46,19 +44,15 @@ public class CauldronWorker {
     private final List<CauldronWorkerRunnable> running;
 
     public CauldronWorker() throws CauldronException {
-        this(new ArrayList<>(CauldronTaskTypeProvider.getAllTaskTypes()));
+        this(Cauldron.get(), Runtime.getRuntime().availableProcessors());
     }
 
-    public CauldronWorker(List<Class<? extends CauldronTask>> taskTypes) throws CauldronException {
-        this(Cauldron.get(), Runtime.getRuntime().availableProcessors(), taskTypes);
-    }
-
-    public CauldronWorker(Cauldron cauldron, int parallelism, List<Class<? extends CauldronTask>> taskTypes) {
+    public CauldronWorker(Cauldron cauldron, int parallelism) throws CauldronException {
         this.service = Executors.newFixedThreadPool(parallelism);
         this.name = UUID.randomUUID().toString();
         this.running = new ArrayList<>();
         for (int i = 0; i < parallelism; i++) {
-            CauldronWorkerRunnable runner = new CauldronWorkerRunnable(cauldron, taskTypes, name + ":" + Integer.toString(i + 1));
+            CauldronWorkerRunnable runner = new CauldronWorkerRunnable(cauldron, name + ":" + Integer.toString(i + 1));
             this.service.submit(runner);
             this.running.add(runner);
         }
@@ -66,10 +60,7 @@ public class CauldronWorker {
 
     public static void main(String[] args) {
         try {
-            final CauldronWorker worker = new CauldronWorker(
-                    Cauldron.get(),
-                    Runtime.getRuntime().availableProcessors(),
-                    new ArrayList<>(CauldronTaskTypeProvider.getAllTaskTypes()));
+            final CauldronWorker worker = new CauldronWorker();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 worker.shutdown(false);
             }));

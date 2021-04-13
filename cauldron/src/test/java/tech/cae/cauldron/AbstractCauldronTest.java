@@ -23,19 +23,47 @@
  */
 package tech.cae.cauldron;
 
+import com.google.auto.service.AutoService;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.junit.BeforeClass;
+import org.testcontainers.containers.GenericContainer;
+import tech.cae.cauldron.api.CauldronConfiguration;
+import tech.cae.cauldron.api.CauldronConfigurationProvider;
+import tech.cae.cauldron.api.exceptions.CauldronException;
+
 /**
  *
  * @author peter
  */
-public abstract class AbstractCauldronTest extends AbstractMongoDBTest {
+@AutoService(CauldronConfigurationProvider.class)
+public class AbstractCauldronTest extends CauldronConfigurationProvider {
 
-    private Cauldron cauldron;
+    private static GenericContainer mongo;
 
-    public Cauldron getCauldron() {
-        if (cauldron == null) {
-            cauldron = new Cauldron(getMongoClient().getDatabase("cauldron"), "tasks");
+    @BeforeClass
+    public static void startMongo() {
+        mongo = new GenericContainer("mongo:4.0").withExposedPorts(27017);
+        mongo.setCommand("--replSet", "rs0");
+        mongo.start();
+        try {
+            mongo.execInContainer("mongo", "--eval", "rs.initiate()");
+        } catch (UnsupportedOperationException ex) {
+            Logger.getLogger(AbstractCauldronTest.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(AbstractCauldronTest.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InterruptedException ex) {
+            Logger.getLogger(AbstractCauldronTest.class.getName()).log(Level.SEVERE, null, ex);
         }
-        return cauldron;
     }
 
+//    @AfterClass
+//    public static void stopMongo() {
+//        mongo.stop();
+//    }
+    @Override
+    public CauldronConfiguration getConfiguration() {
+        return new CauldronConfiguration(mongo.getContainerIpAddress(), mongo.getMappedPort(27017), "cauldron", "tasks");
+    }
 }

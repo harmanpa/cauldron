@@ -28,8 +28,8 @@ package tech.cae.cauldron.api;
  * @author peter
  */
 public enum CauldronStatus {
+    Blocked,
     Queued,
-    Scheduled,
     Running,
     Cancelled,
     Completed,
@@ -44,4 +44,13 @@ public enum CauldronStatus {
         return valueOf(string.substring(0, 1).toUpperCase().concat(string.substring(1).toLowerCase()));
     }
 
+    public boolean isFinished() {
+        switch (this) {
+            case Cancelled:
+            case Completed:
+            case Failed:
+                return true;
+        }
+        return false;
+    }
 }

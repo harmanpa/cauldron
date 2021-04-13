@@ -24,7 +24,9 @@
 package tech.cae.cauldron.worker;
 
 import com.google.auto.service.AutoService;
-import org.junit.AfterClass;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.junit.BeforeClass;
 import org.testcontainers.containers.GenericContainer;
 import tech.cae.cauldron.Cauldron;
@@ -43,8 +45,18 @@ public class AbstractCauldronTest extends CauldronConfigurationProvider {
 
     @BeforeClass
     public static void startMongo() {
-        mongo = new GenericContainer("mongo:3").withExposedPorts(27017);
+        mongo = new GenericContainer("mongo:4.0").withExposedPorts(27017);
+        mongo.setCommand("--replSet", "rs0");
         mongo.start();
+        try {
+            mongo.execInContainer("mongo", "--eval", "rs.initiate()");
+        } catch (UnsupportedOperationException ex) {
+            Logger.getLogger(AbstractCauldronTest.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(AbstractCauldronTest.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InterruptedException ex) {
+            Logger.getLogger(AbstractCauldronTest.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
 
     public Cauldron getCauldron() throws CauldronException {
@@ -55,7 +67,6 @@ public class AbstractCauldronTest extends CauldronConfigurationProvider {
 //    public static void stopMongo() {
 //        mongo.stop();
 //    }
-
     @Override
     public CauldronConfiguration getConfiguration() {
         return new CauldronConfiguration(mongo.getContainerIpAddress(), mongo.getMappedPort(27017), "cauldron", "tasks");
