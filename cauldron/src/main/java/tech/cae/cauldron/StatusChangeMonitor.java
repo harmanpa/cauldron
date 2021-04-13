@@ -76,7 +76,7 @@ class StatusChangeMonitor {
         this.listeners.remove(listener);
     }
 
-    public CompletableFuture<CauldronTask> getCompletion(String id) throws CauldronException {
+    public CompletableFuture<CauldronTask> getCompletion(String id) {
         if (futures.containsKey(id)) {
             return futures.get(id);
         }

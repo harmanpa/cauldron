@@ -307,9 +307,8 @@ public class Cauldron {
      *
      * @param id Task id
      * @return
-     * @throws tech.cae.cauldron.api.exceptions.CauldronException
      */
-    public CompletableFuture<CauldronTask> getCompletion(String id) throws CauldronException {
+    public CompletableFuture<CauldronTask> getCompletion(String id) {
         return getChangeMonitor().getCompletion(id);
     }
 
