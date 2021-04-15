@@ -43,7 +43,7 @@ public class SerializationTest extends AbstractCauldronTest {
         task.setInput("Hello");
         Document doc = Cauldron.get().serialize(task);
         System.out.println(doc.toJson());
-        MyTask task2 = Cauldron.get().deserialize(doc, MyTask.class);
+        MyTask task2 = (MyTask)Cauldron.get().deserialize(doc);
         task2.run(new CauldronCallback() {
             @Override
             public void log(String message) {

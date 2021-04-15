@@ -33,7 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.bson.BsonDocument;
 import org.bson.BsonDocumentReader;
 import org.bson.Document;
@@ -85,10 +86,16 @@ class StatusChangeMonitor {
         switch (cauldron.getTaskMeta(id).getStatus()) {
             case Completed:
             case Failed:
-            case Cancelled:
-                // Notify any completed or failed tasks and remove
-                future.complete(cauldron.getTask(id, CauldronTask.class));
-                return future;
+            case Cancelled: {
+                try {
+                    // Notify any completed or failed tasks and remove
+                    future.complete(cauldron.getTask(id));
+                } catch (CauldronException ex) {
+                    future.completeExceptionally(ex);
+                }
+            }
+            return future;
+
             default:
         }
         CompletableFuture<CauldronTask> otherFuture = futures.putIfAbsent(id, future);
@@ -124,7 +131,11 @@ class StatusChangeMonitor {
     }
 
     private void onChange(String id, String status, Document payload) {
-        onChange(id, CauldronStatus.fromString(status), payload == null ? null : cauldron.deserialize(payload, CauldronTask.class));
+        try {
+            onChange(id, CauldronStatus.fromString(status), payload == null ? null : cauldron.deserialize(payload));
+        } catch (CauldronException ex) {
+            Logger.getLogger(StatusChangeMonitor.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
 
     private void onChange(String id, CauldronStatus status, CauldronTask payload) {

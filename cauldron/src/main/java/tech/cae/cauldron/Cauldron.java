@@ -99,8 +99,23 @@ public class Cauldron {
         return mapper.convertValue(node, Document.class);
     }
 
-    <T extends CauldronTask> T deserialize(Document document, Class<T> objectClass) {
-        return mapper.convertValue(document, objectClass);
+    CauldronTask deserialize(Document document) throws CauldronException {
+        Class<? extends CauldronTask> type = getTaskType(document);
+        return mapper.convertValue(document, type);
+    }
+
+    Class<? extends CauldronTask> getTaskType(Document document) throws CauldronException {
+        String taskType = document.getString("type");
+        if (taskType == null) {
+            throw new CauldronException("No task type specified");
+        }
+        try {
+            return Thread.currentThread().getContextClassLoader().loadClass(taskType).asSubclass(CauldronTask.class);
+        } catch (ClassNotFoundException ex) {
+            throw new CauldronException("Could not find specified task type " + taskType);
+        } catch (ClassCastException ex) {
+            throw new CauldronException("Task type " + taskType + " does not extend CauldronTask");
+        }
     }
 
     public Distributor getDistributor() throws CauldronException {
@@ -175,47 +190,19 @@ public class Cauldron {
 
     /**
      *
-     * @param <T>
      * @param id
-     * @param taskType
      * @return
+     * @throws tech.cae.cauldron.api.exceptions.CauldronException
      */
-    public <T extends CauldronTask> T getTask(String id, Class<T> taskType) {
+    public CauldronTask getTask(String id) throws CauldronException {
         Iterator<Document> it = collection.find(new Document("_id", new ObjectId(id))).iterator();
         if (it.hasNext()) {
             Document message = it.next();
             Document payload = message.get("payload", Document.class);
             payload.put("id", message.getObjectId("_id").toHexString());
-            return deserialize(payload, taskType);
+            return deserialize(payload);
         }
-        return null;
-    }
-
-    /**
-     *
-     * @param <T>
-     * @param taskType
-     * @return
-     */
-    public <T extends CauldronTask> Iterable<T> getTasks(Class<T> taskType) {
-        return () -> {
-            Iterator<Document> it = collection.find(
-                    new Document("payload.type", taskType.getName())).iterator();
-            return new Iterator<T>() {
-                @Override
-                public boolean hasNext() {
-                    return it.hasNext();
-                }
-
-                @Override
-                public T next() {
-                    Document message = it.next();
-                    Document payload = message.get("payload", Document.class);
-                    payload.put("id", message.getObjectId("_id").toHexString());
-                    return deserialize(payload, taskType);
-                }
-            };
-        };
+        throw new CauldronException("No such task " + id);
     }
 
     /**

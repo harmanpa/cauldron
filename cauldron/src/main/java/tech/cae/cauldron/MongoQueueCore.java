@@ -29,6 +29,7 @@ import com.mongodb.client.model.FindOneAndUpdateOptions;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.ReturnDocument;
 import com.mongodb.client.model.UpdateOptions;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
@@ -343,7 +344,7 @@ final class MongoQueueCore {
         }
         final Document message = new Document("payload", payload)
                 .append("status", parents.isEmpty() ? "queued" : "blocked")
-                .append("resetTimestamp", new Date(Long.MAX_VALUE))
+                .append("resetTimestamp", Date.from(Instant.now().plusSeconds(3600)))
                 .append("earliestGet", earliestGet)
                 .append("parents", parents)
                 .append("priority", priority)
@@ -368,7 +369,7 @@ final class MongoQueueCore {
         List<Document> messages = payloads.stream().map(payload -> {
             final Document message = new Document("payload", payload)
                     .append("status", "queued")
-                    .append("resetTimestamp", new Date(Long.MAX_VALUE))
+                    .append("resetTimestamp", Date.from(Instant.now().plusSeconds(3600)))
                     .append("earliestGet", earliestGet)
                     .append("priority", priority)
                     .append("created", new Date())

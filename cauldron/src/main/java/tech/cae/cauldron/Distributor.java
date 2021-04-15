@@ -29,12 +29,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.bson.Document;
 import tech.cae.cauldron.api.CauldronStatus;
 import tech.cae.cauldron.api.CauldronStatusChangeListener;
 import tech.cae.cauldron.api.CauldronTask;
+import tech.cae.cauldron.api.exceptions.CauldronException;
 
 /**
  *
@@ -88,8 +90,14 @@ public class Distributor implements CauldronStatusChangeListener {
                             this.paused = true;
                             LOG.info("Pausing distributor");
                         } else {
-                            // if you get one, put it on the queue and continue
-                            this.queue.add(this.cauldron.deserialize(doc, CauldronTask.class));
+                            try {
+                                // if you get one, put it on the queue and continue
+                                this.queue.add(this.cauldron.deserialize(doc));
+                            } catch (CauldronException ex) {
+                                // If it fails, log an error and find another task
+                                Logger.getLogger(Distributor.class.getName()).log(Level.SEVERE, null, ex);
+                                this.workerQueue.add(worker);
+                            }
                         }
                     } catch (InterruptedException ex) {
                     }
