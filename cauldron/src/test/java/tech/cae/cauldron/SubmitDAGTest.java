@@ -24,6 +24,7 @@
 package tech.cae.cauldron;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.Test;
 import tech.cae.cauldron.api.CauldronStatus;
@@ -38,7 +39,8 @@ public class SubmitDAGTest extends AbstractCauldronTest {
 
     @Test
     public void test() throws CauldronException, InterruptedException, ExecutionException {
-        Executors.newSingleThreadExecutor().submit(new Runnable() {
+        ExecutorService ex = Executors.newSingleThreadExecutor();
+        ex.submit(new Runnable() {
             @Override
             public void run() {
                 while (true) {
@@ -56,6 +58,6 @@ public class SubmitDAGTest extends AbstractCauldronTest {
         SillyTask first = new SillyTask("FIRST");
         CauldronDAG dag = CauldronDAG.create(new SillyTask("LAST")).after(CauldronDAG.create(new SillyTask("SECOND_ONE")).after(first));
         Cauldron.get().getCompletion(dag.submit().getId()).get();
-
+        ex.shutdown();
     }
 }

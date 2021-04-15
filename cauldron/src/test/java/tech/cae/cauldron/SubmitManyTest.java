@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.Test;
 import tech.cae.cauldron.api.CauldronStatus;
@@ -41,7 +42,8 @@ public class SubmitManyTest extends AbstractCauldronTest {
 
     @Test
     public void test() throws InterruptedException, ExecutionException, CauldronException {
-        Executors.newSingleThreadExecutor().submit(new Runnable() {
+        ExecutorService ex = Executors.newSingleThreadExecutor();
+        ex.submit(new Runnable() {
             @Override
             public void run() {
                 while (true) {
@@ -65,6 +67,7 @@ public class SubmitManyTest extends AbstractCauldronTest {
         for (CompletableFuture<CauldronTask> future : futures) {
             System.out.println(((AddingTask) future.get()).getC());
         }
+        ex.shutdown();
     }
 
     private CompletableFuture<CauldronTask> submit(double a, double b) throws CauldronException {
